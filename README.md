@@ -29,3 +29,10 @@ docs/         Project workflows and technical notes
 specs/        Feature behavior and acceptance criteria
 src/CarGame/  Game executable
 ```
+
+## Technical documentation
+
+- [`docs/vehicle-dynamics.md`](docs/vehicle-dynamics.md) explains the reusable
+  vehicle definition, axle-load, slip-angle, and friction-circle model.
+- [`docs/asset-workflow.md`](docs/asset-workflow.md) defines generated PNG asset
+  intake and provenance requirements.
