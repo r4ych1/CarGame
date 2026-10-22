@@ -1,0 +1,21 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Local .NET CLI state used by sandboxed tooling
+.dotnet-home/
+
+# Editor and user-local state
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+*.user
+*.suo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Generated asset experiments; accepted assets belong in assets/game.
+assets/work/
