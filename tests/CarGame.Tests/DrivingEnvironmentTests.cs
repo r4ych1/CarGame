@@ -8,8 +8,8 @@ public sealed class DrivingEnvironmentTests
     [Fact]
     public void EnvironmentBoundaryHasFinitePlayableBounds()
     {
-        Assert.Equal(new Vector2(-220.0f, -380.0f), DrivingEnvironment.BoundaryMinimumMeters);
-        Assert.Equal(new Vector2(220.0f, 70.0f), DrivingEnvironment.BoundaryMaximumMeters);
+        Assert.Equal(new Vector2(-80.0f, -380.0f), DrivingEnvironment.BoundaryMinimumMeters);
+        Assert.Equal(new Vector2(80.0f, 70.0f), DrivingEnvironment.BoundaryMaximumMeters);
         Assert.True(DrivingEnvironment.BoundaryMaximumMeters.X > DrivingEnvironment.BoundaryMinimumMeters.X);
         Assert.True(DrivingEnvironment.BoundaryMaximumMeters.Y > DrivingEnvironment.BoundaryMinimumMeters.Y);
     }
@@ -37,6 +37,63 @@ public sealed class DrivingEnvironmentTests
         Assert.Contains(world.Environment.Scenery, item => item.Kind == SceneryKind.Bush);
         Assert.Contains(world.Environment.Scenery, item => item.Kind == SceneryKind.Rock);
         Assert.True(world.Environment.Scenery.Count(item => item.Kind == SceneryKind.Building) >= 10);
+        Assert.Contains(world.Environment.Scenery, item => item.Kind == SceneryKind.Shack);
+        Assert.Contains(world.Environment.Scenery, item => item.Kind == SceneryKind.ParkedCar);
+        Assert.Contains(world.Environment.Scenery, item => item.Kind == SceneryKind.ParkedTruck);
+    }
+
+    [Fact]
+    public void StreamIsDeepOutsideBridgeAndSafeOnBridge()
+    {
+        using GameWorld world = new();
+
+        Assert.True(world.Environment.IsDeepWater(new Vector2(25.0f, DrivingEnvironment.StreamCenterYMeters)));
+        Assert.False(world.Environment.IsDeepWater(new Vector2(
+            DrivingEnvironment.BridgeCenterXMeters,
+            DrivingEnvironment.StreamCenterYMeters)));
+        Assert.False(world.Environment.IsDeepWater(new Vector2(25.0f, -105.0f)));
+    }
+
+    [Fact]
+    public void RoadIsStraightAndCenteredAcrossBridge()
+    {
+        float[] crossingSamples = [-136.0f, -132.0f, -120.0f, -108.0f, -104.0f];
+
+        Assert.All(crossingSamples, y =>
+            Assert.Equal(DrivingEnvironment.BridgeCenterXMeters, DrivingEnvironment.RoadCenterXMeters(y), 0.0001f));
+        Assert.NotEqual(
+            DrivingEnvironment.BridgeCenterXMeters,
+            DrivingEnvironment.RoadCenterXMeters(-80.0f));
+    }
+
+    [Fact]
+    public void BushesRemainOutsideMainRoadAndDirtRoadBypassesCheckpoint()
+    {
+        using GameWorld world = new();
+        SceneryObject[] bushes = world.Environment.Scenery.Where(item => item.Kind == SceneryKind.Bush).ToArray();
+
+        Assert.All(bushes, bush =>
+            Assert.True(MathF.Abs(bush.PositionMeters.X - DrivingEnvironment.RoadCenterXMeters(bush.PositionMeters.Y)) > 7.0f));
+
+        IReadOnlyList<Vector2> bypass = DrivingEnvironment.DirtRoadPointsMeters;
+        Assert.Equal(DrivingEnvironment.RoadCenterXMeters(bypass[0].Y), bypass[0].X, 0.0001f);
+        Assert.Equal(DrivingEnvironment.RoadCenterXMeters(bypass[^1].Y), bypass[^1].X, 0.0001f);
+        Assert.Contains(bypass, point => point.X > 45.0f && point.Y < -175.0f && point.Y > -225.0f);
+    }
+
+    [Fact]
+    public void StreamCorridorHasNoVegetationAndFlowAdvancesOnFixedStep()
+    {
+        using GameWorld world = new();
+        float exclusionHalfWidth = DrivingEnvironment.StreamWidthMeters * 0.5f + 4.0f;
+        IEnumerable<SceneryObject> vegetation = world.Environment.Scenery.Where(item =>
+            item.Kind is SceneryKind.Tree or SceneryKind.Bush);
+
+        Assert.All(vegetation, item =>
+            Assert.True(MathF.Abs(item.PositionMeters.Y - DrivingEnvironment.StreamCenterYMeters) > exclusionHalfWidth));
+
+        world.Environment.Step(0.5f);
+        Assert.Equal(0.5f, world.Environment.WaterFlowAgeSeconds);
     }
 
     [Fact]
@@ -68,21 +125,33 @@ public sealed class DrivingEnvironmentTests
         PhysicsProp northBarrier = Assert.Single(world.Environment.Props, prop =>
             prop.Kind == PhysicsPropKind.GuardRail &&
             prop.PositionMeters == DrivingEnvironment.CheckpointNorthBarrierMeters);
-        SceneryObject shack = Assert.Single(world.Environment.Scenery, item => item.Kind == SceneryKind.Shack);
+        SceneryObject shack = Assert.Single(world.Environment.Scenery, item =>
+            item.Kind == SceneryKind.Shack &&
+            item.PositionMeters == DrivingEnvironment.CheckpointShackMeters);
 
         Assert.NotEqual(southBarrier.PositionMeters.X, northBarrier.PositionMeters.X);
         Assert.NotEqual(southBarrier.PositionMeters.Y, northBarrier.PositionMeters.Y);
+        Assert.True(MathF.Abs(southBarrier.PositionMeters.Y - northBarrier.PositionMeters.Y) >= 18.0f);
+        Assert.False(southBarrier.IsAnchored);
+        Assert.False(northBarrier.IsAnchored);
         Assert.Equal(DrivingEnvironment.CheckpointShackMeters, shack.PositionMeters);
     }
 
     [Fact]
-    public void RoadHasOnlyThreeGuardRailsAndCheckpointApproachCones()
+    public void RoadHasCheckpointAndAnchoredBridgeGuardRailsAndApproachCones()
     {
         using GameWorld world = new();
         PhysicsProp[] guardRails = world.Environment.Props.Where(prop => prop.Kind == PhysicsPropKind.GuardRail).ToArray();
         PhysicsProp[] cones = world.Environment.Props.Where(prop => prop.Kind == PhysicsPropKind.TrafficCone).ToArray();
+        PhysicsProp[] bridgeRails = guardRails.Where(prop =>
+            MathF.Abs(prop.PositionMeters.Y - DrivingEnvironment.StreamCenterYMeters) <
+            DrivingEnvironment.StreamWidthMeters * 0.5f).ToArray();
 
-        Assert.Equal(3, guardRails.Length);
+        Assert.Equal(11, guardRails.Length);
+        Assert.Equal(8, bridgeRails.Length);
+        Assert.All(bridgeRails, rail => Assert.True(rail.IsAnchored));
+        Assert.Equal(4, bridgeRails.Count(rail => rail.PositionMeters.X < DrivingEnvironment.BridgeCenterXMeters));
+        Assert.Equal(4, bridgeRails.Count(rail => rail.PositionMeters.X > DrivingEnvironment.BridgeCenterXMeters));
         Assert.Equal(8, cones.Length);
         Assert.All(cones, cone => Assert.InRange(cone.PositionMeters.Y, -240.0f, -200.0f));
     }
@@ -106,6 +175,21 @@ public sealed class DrivingEnvironmentTests
             Assert.True(float.IsFinite(item.PositionMeters.X));
             Assert.True(float.IsFinite(item.PositionMeters.Y));
         });
+    }
+
+    [Fact]
+    public void BlastedTreeUsesLongTrunkAndStrongLimitedKnockback()
+    {
+        using GameWorld world = new();
+        SceneryObject tree = world.Environment.Scenery.First(item => item.Kind == SceneryKind.Tree);
+
+        world.Environment.Explode(tree.PositionMeters);
+        world.Environment.Step(1.0f / 60.0f);
+
+        WorldDebris fallenTree = world.Environment.Debris.First(item => item.Kind == SceneryKind.Tree);
+        Assert.Equal(new Vector2(0.7f, 5.5f), fallenTree.SizeMeters);
+        Assert.True(fallenTree.LinearVelocityMetersPerSecond.Length() > 20.0f);
+        Assert.InRange(fallenTree.AngularVelocityRadiansPerSecond, -0.55f, 0.55f);
     }
 
     [Fact]

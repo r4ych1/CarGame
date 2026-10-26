@@ -40,7 +40,7 @@ public sealed class PhysicsPropTests
 
         world.ResetVehicle();
 
-        Assert.Equal(51, world.Environment.Props.Count);
+        Assert.Equal(59, world.Environment.Props.Count);
         Assert.Equal(originalPosition, world.Environment.Props[0].PositionMeters);
         Assert.Equal(Vector2.Zero, world.Environment.Props[0].LinearVelocityMetersPerSecond);
     }
@@ -56,5 +56,33 @@ public sealed class PhysicsPropTests
 
         Assert.InRange(guardRail.AngularVelocityRadiansPerSecond, -0.65f, 0.65f);
         Assert.True(guardRail.LinearVelocityMetersPerSecond.Length() > 20.0f);
+    }
+
+    [Fact]
+    public void TrafficConesAreTheLightestMovableProps()
+    {
+        using GameWorld world = new();
+        PhysicsProp cone = world.Environment.Props.First(prop => prop.Kind == PhysicsPropKind.TrafficCone);
+        PhysicsProp[] otherMovableProps = world.Environment.Props.Where(prop =>
+            !prop.IsAnchored && prop.Kind != PhysicsPropKind.TrafficCone).ToArray();
+
+        Assert.NotEmpty(otherMovableProps);
+        Assert.All(otherMovableProps, prop => Assert.True(cone.MassKilograms < prop.MassKilograms));
+    }
+
+    [Fact]
+    public void MovableCheckpointGuardRailRespondsToBlast()
+    {
+        using GameWorld world = new();
+        PhysicsProp guardRail = world.Environment.Props.Single(prop =>
+            prop.PositionMeters == DrivingEnvironment.CheckpointSouthBarrierMeters);
+        Vector2 originalPosition = guardRail.PositionMeters;
+
+        world.Environment.Explode(originalPosition);
+        world.Step(default, 1.0f / 60.0f, 4);
+
+        Assert.False(guardRail.IsAnchored);
+        Assert.NotEqual(originalPosition, guardRail.PositionMeters);
+        Assert.NotEqual(Vector2.Zero, guardRail.LinearVelocityMetersPerSecond);
     }
 }

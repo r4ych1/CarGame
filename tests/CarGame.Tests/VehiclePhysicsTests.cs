@@ -203,6 +203,38 @@ public sealed class VehiclePhysicsTests
         Assert.True(first.Vehicle.IsExploded);
     }
 
+    [Fact]
+    public void SunkVehicleIgnoresControlsUntilReset()
+    {
+        using GameWorld world = new();
+        world.Vehicle.Sink();
+
+        Step(world, new VehicleInput(1.0f, 1.0f), 120);
+
+        Assert.True(world.Vehicle.IsSunk);
+        Assert.Equal(0.0f, world.Vehicle.SpeedMetersPerSecond);
+        Assert.Equal(Vector2.Zero, world.Vehicle.PositionMeters);
+
+        world.ResetVehicle();
+        Assert.False(world.Vehicle.IsSunk);
+    }
+
+    [Fact]
+    public void SunkVehicleCannotExplodeOrDamageEnvironment()
+    {
+        using GameWorld world = new();
+        world.Vehicle.Sink();
+
+        world.ExplodeVehicle();
+        world.Vehicle.Explode();
+
+        Assert.False(world.Vehicle.IsExploded);
+        Assert.Empty(world.Vehicle.ExplosionPieces);
+        Assert.Empty(world.Environment.BlastEffects);
+        Assert.Empty(world.Environment.Craters);
+        Assert.DoesNotContain(world.Environment.Scenery, item => item.IsDestroyed);
+    }
+
     private static void Step(GameWorld world, VehicleInput input, int stepCount)
     {
         for (int index = 0; index < stepCount; index++)

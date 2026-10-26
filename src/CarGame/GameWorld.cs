@@ -1,3 +1,4 @@
+using System.Numerics;
 using Box2D.NET;
 using static Box2D.NET.B2Types;
 using static Box2D.NET.B2Worlds;
@@ -25,8 +26,14 @@ internal sealed class GameWorld : IDisposable
     public void Step(VehicleInput input, float fixedTimeStep, int subSteps)
     {
         Vehicle.ApplyControls(input, fixedTimeStep);
-        Environment.Step(fixedTimeStep);
+        if (Environment.IsDeepWater(Vehicle.PositionMeters))
+        {
+            Vehicle.Sink();
+        }
+        Vector2? playerObstacle = Vehicle.IsExploded ? null : Vehicle.PositionMeters;
+        Environment.Step(fixedTimeStep, playerObstacle);
         b2World_Step(worldId, fixedTimeStep, subSteps);
+        Environment.PostPhysicsStep();
     }
 
     public void ResetVehicle()
@@ -37,7 +44,7 @@ internal sealed class GameWorld : IDisposable
 
     public void ExplodeVehicle()
     {
-        if (!Vehicle.IsExploded)
+        if (!Vehicle.IsExploded && !Vehicle.IsSunk)
         {
             Environment.Explode(Vehicle.PositionMeters);
             Vehicle.Explode();

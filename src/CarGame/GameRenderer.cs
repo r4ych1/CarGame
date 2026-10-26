@@ -63,29 +63,83 @@ internal sealed class GameRenderer
     private static void DrawEnvironment(DrivingEnvironment environment)
     {
         float scale = SimulationUnits.PixelsPerMeter;
-        Raylib.DrawRectangle(-220 * (int)scale, -380 * (int)scale, 440 * (int)scale, 450 * (int)scale, new Color(65, 94, 57, 255));
+        Vector2 mapMinimum = DrivingEnvironment.BoundaryMinimumMeters * scale;
+        Vector2 mapMaximum = DrivingEnvironment.BoundaryMaximumMeters * scale;
+        Raylib.DrawRectangle(
+            (int)mapMinimum.X,
+            (int)mapMinimum.Y,
+            (int)(mapMaximum.X - mapMinimum.X),
+            (int)(mapMaximum.Y - mapMinimum.Y),
+            new Color(65, 94, 57, 255));
         DrawEnvironmentBoundary(scale);
 
-        // Winding stream and the main road are thick sampled polylines.
-        Vector2 previousRoad = new(0.0f, 60.0f * scale);
-        Vector2 previousStream = new(-70.0f * scale, 40.0f * scale);
-        for (int index = 1; index <= 45; index++)
+        float streamTop = (DrivingEnvironment.StreamCenterYMeters - DrivingEnvironment.StreamWidthMeters * 0.5f) * scale;
+        Raylib.DrawRectangle(
+            (int)mapMinimum.X,
+            (int)(streamTop - scale),
+            (int)(mapMaximum.X - mapMinimum.X),
+            (int)((DrivingEnvironment.StreamWidthMeters + 2.0f) * scale),
+            new Color(57, 82, 61, 255));
+        Raylib.DrawRectangle(
+            (int)mapMinimum.X,
+            (int)streamTop,
+            (int)(mapMaximum.X - mapMinimum.X),
+            (int)(DrivingEnvironment.StreamWidthMeters * scale),
+            new Color(42, 112, 151, 255));
+        DrawRiverFlow(environment, mapMinimum, mapMaximum, scale);
+
+        DrawDirtRoad(scale);
+
+        // Full-width circles at each sample act as round joins, filling the
+        // outside corners that separate thick rectangular line segments.
+        Vector2[] roadPoints = new Vector2[46];
+        for (int index = 0; index < roadPoints.Length; index++)
         {
             float y = 60.0f - index * 10.0f;
-            Vector2 road = new(MathF.Sin(index * 0.18f) * 18.0f * scale, y * scale);
-            Vector2 stream = new((-70.0f + MathF.Sin(index * 0.31f) * 16.0f) * scale, y * scale);
-            Raylib.DrawLineEx(previousStream, stream, 9.0f * scale, new Color(45, 116, 151, 255));
-            Raylib.DrawLineEx(previousRoad, road, 10.0f * scale, new Color(73, 75, 72, 255));
-            Raylib.DrawLineEx(previousRoad, road, 0.18f * scale, new Color(218, 190, 89, 255));
-            previousRoad = road;
-            previousStream = stream;
+            roadPoints[index] = new(DrivingEnvironment.RoadCenterXMeters(y) * scale, y * scale);
         }
 
-        // Town cross streets and two bridges over the stream.
+        Color roadColor = new(73, 75, 72, 255);
+        for (int index = 1; index < roadPoints.Length; index++)
+        {
+            Raylib.DrawLineEx(roadPoints[index - 1], roadPoints[index], 10.0f * scale, roadColor);
+            Raylib.DrawCircleV(roadPoints[index], 5.0f * scale, roadColor);
+        }
+
+        for (int index = 1; index < roadPoints.Length; index++)
+        {
+            Raylib.DrawLineEx(
+                roadPoints[index - 1],
+                roadPoints[index],
+                0.18f * scale,
+                new Color(218, 190, 89, 255));
+        }
+
+        Vector2 bridgeCenter = new(
+            DrivingEnvironment.BridgeCenterXMeters * scale,
+            DrivingEnvironment.StreamCenterYMeters * scale);
+        Vector2 bridgeSize = new(
+            DrivingEnvironment.BridgeWidthMeters * scale,
+            (DrivingEnvironment.StreamWidthMeters + 4.0f) * scale);
+        Raylib.DrawRectanglePro(
+            new Rectangle(bridgeCenter.X, bridgeCenter.Y, bridgeSize.X, bridgeSize.Y),
+            bridgeSize * 0.5f,
+            0.0f,
+            new Color(86, 85, 79, 255));
+        Raylib.DrawLineEx(
+            bridgeCenter - new Vector2(bridgeSize.X * 0.5f, bridgeSize.Y * 0.5f),
+            bridgeCenter - new Vector2(bridgeSize.X * 0.5f, -bridgeSize.Y * 0.5f),
+            0.28f * scale,
+            new Color(174, 179, 174, 255));
+        Raylib.DrawLineEx(
+            bridgeCenter + new Vector2(bridgeSize.X * 0.5f, -bridgeSize.Y * 0.5f),
+            bridgeCenter + new Vector2(bridgeSize.X * 0.5f, bridgeSize.Y * 0.5f),
+            0.28f * scale,
+            new Color(174, 179, 174, 255));
+
+        // Town cross streets.
         for (int row = 0; row < 4; row++)
             Raylib.DrawRectangle(-42 * (int)scale, (int)((-268 - row * 16) * scale), 84 * (int)scale, 7 * (int)scale, new Color(73, 75, 72, 255));
-        Raylib.DrawRectangle(-78 * (int)scale, -82 * (int)scale, 22 * (int)scale, 11 * (int)scale, new Color(116, 101, 77, 255));
-        Raylib.DrawRectangle(-80 * (int)scale, -205 * (int)scale, 22 * (int)scale, 11 * (int)scale, new Color(116, 101, 77, 255));
         foreach (WallSegment wall in environment.TownWalls)
         {
             Vector2 center = wall.PositionMeters * scale;
@@ -109,7 +163,114 @@ internal sealed class GameRenderer
             DrawWorldDebris(item);
         foreach (PhysicsProp prop in environment.Props)
             DrawPhysicsProp(prop);
+        foreach (TrafficVehicle trafficVehicle in environment.Traffic.Vehicles)
+            if (trafficVehicle.IsActive) DrawTrafficVehicle(trafficVehicle);
         DrawBlastEffects(environment.BlastEffects);
+    }
+
+    private static void DrawTrafficVehicle(TrafficVehicle vehicle)
+    {
+        float scale = SimulationUnits.PixelsPerMeter;
+        Vector2 center = vehicle.PositionMeters * scale;
+        Vector2 size = vehicle.SizeMeters * scale;
+        float rotation = vehicle.RotationRadians * 180.0f / MathF.PI;
+        ColorRgb rgb = vehicle.Color;
+        Color bodyColor = vehicle.IsWrecked
+            ? new Color(72, 70, 66, 255)
+            : new Color((int)rgb.Red, (int)rgb.Green, (int)rgb.Blue, 255);
+        Raylib.DrawRectanglePro(
+            new Rectangle(center.X + 2.0f, center.Y + 2.0f, size.X, size.Y),
+            size * 0.5f,
+            rotation,
+            new Color(24, 28, 27, 150));
+        Raylib.DrawRectanglePro(
+            new Rectangle(center.X, center.Y, size.X, size.Y),
+            size * 0.5f,
+            rotation,
+            bodyColor);
+        Vector2 forward = VehicleMath.Forward(vehicle.RotationRadians);
+        Vector2 windowCenter = center + forward * size.Y * 0.12f;
+        Vector2 windowSize = new(size.X * 0.72f, size.Y * 0.24f);
+        Raylib.DrawRectanglePro(
+            new Rectangle(windowCenter.X, windowCenter.Y, windowSize.X, windowSize.Y),
+            windowSize * 0.5f,
+            rotation,
+            new Color(126, 181, 197, 255));
+        if (vehicle.IsDisabled || vehicle.IsWrecked)
+        {
+            DrawDisabledTrafficEngine(vehicle, center, size, scale);
+        }
+    }
+
+    private static void DrawDisabledTrafficEngine(
+        TrafficVehicle vehicle,
+        Vector2 center,
+        Vector2 size,
+        float scale)
+    {
+        Vector2 forward = VehicleMath.Forward(vehicle.RotationRadians);
+        Vector2 right = VehicleMath.Right(vehicle.RotationRadians);
+        Vector2 engine = center + forward * size.Y * 0.32f;
+        float age = vehicle.DamageEffectAgeSeconds;
+        float flicker = 0.82f + 0.18f * MathF.Sin(age * 13.0f);
+        float outerRadius = 0.32f * scale * flicker;
+        Raylib.DrawCircleV(engine, outerRadius, new Color(198, 54, 18, 220));
+        Raylib.DrawCircleV(engine + forward * outerRadius * 0.18f, outerRadius * 0.62f, new Color(244, 132, 28, 235));
+        Raylib.DrawCircleV(engine + forward * outerRadius * 0.32f, outerRadius * 0.28f, new Color(255, 214, 73, 245));
+
+        for (int index = 0; index < 4; index++)
+        {
+            float phase = (age * 0.42f + index * 0.24f) % 1.0f;
+            Vector2 smokeCenter = engine - forward * phase * 1.15f * scale +
+                right * MathF.Sin((phase + index) * 5.0f) * 0.18f * scale;
+            float radius = (0.20f + phase * 0.42f) * scale;
+            byte alpha = (byte)(150.0f * (1.0f - phase));
+            Raylib.DrawCircleV(smokeCenter, radius, new Color(61, 61, 58, (int)alpha));
+        }
+    }
+
+    private static void DrawRiverFlow(
+        DrivingEnvironment environment,
+        Vector2 mapMinimum,
+        Vector2 mapMaximum,
+        float scale)
+    {
+        float width = mapMaximum.X - mapMinimum.X;
+        float streamTop = (DrivingEnvironment.StreamCenterYMeters - DrivingEnvironment.StreamWidthMeters * 0.5f) * scale;
+        for (int index = 0; index < 18; index++)
+        {
+            float phase = (environment.WaterFlowAgeSeconds * (0.75f + index % 3 * 0.16f) + index * 7.7f) * scale;
+            float x = mapMinimum.X + ((phase % (width + 10.0f * scale)) - 5.0f * scale);
+            float y = streamTop + (1.2f + (index % 6) * 3.15f) * scale;
+            float length = (2.5f + (index % 4) * 0.8f) * scale;
+            Raylib.DrawLineEx(
+                new Vector2(x, y),
+                new Vector2(MathF.Min(x + length, mapMaximum.X), y),
+                0.10f * scale,
+                new Color(133, 190, 207, 105));
+        }
+    }
+
+    private static void DrawDirtRoad(float scale)
+    {
+        IReadOnlyList<Vector2> points = DrivingEnvironment.DirtRoadPointsMeters;
+        Color dirt = new(132, 104, 68, 255);
+        for (int index = 1; index < points.Count; index++)
+        {
+            Vector2 previous = points[index - 1] * scale;
+            Vector2 current = points[index] * scale;
+            Raylib.DrawLineEx(previous, current, 5.0f * scale, dirt);
+            Raylib.DrawCircleV(current, 2.5f * scale, dirt);
+        }
+
+        for (int index = 1; index < points.Count; index++)
+        {
+            Raylib.DrawLineEx(
+                points[index - 1] * scale,
+                points[index] * scale,
+                0.10f * scale,
+                new Color(174, 142, 91, 180));
+        }
     }
 
     private static void DrawPhysicsProp(PhysicsProp prop)
@@ -253,7 +414,9 @@ internal sealed class GameRenderer
             trunkSize * 0.5f,
             item.RotationRadians * 180.0f / MathF.PI,
             new Color(91, 62, 38, 255));
-        Raylib.DrawCircleV(center, 1.2f * scale, new Color(35, 91, 43, 255));
+        Vector2 canopyCenter = center +
+            VehicleMath.Forward(item.RotationRadians) * trunkSize.Y * 0.44f;
+        Raylib.DrawCircleV(canopyCenter, 1.2f * scale, new Color(35, 91, 43, 255));
     }
 
     private static void DrawScenery(SceneryKind kind, Vector2 positionMeters, Vector2 sizeMeters, float rotation)
@@ -271,6 +434,8 @@ internal sealed class GameRenderer
         {
             SceneryKind.Building => new(177, 157, 126, 255),
             SceneryKind.Shack => new(123, 91, 62, 255),
+            SceneryKind.ParkedCar => new(55, 91, 133, 255),
+            SceneryKind.ParkedTruck => new(142, 137, 119, 255),
             _ => new(104, 105, 99, 255),
         };
         Raylib.DrawRectanglePro(new Rectangle(center.X, center.Y, sizeMeters.X * scale, sizeMeters.Y * scale), sizeMeters * scale * 0.5f, rotation * 180.0f / MathF.PI, fill);
@@ -281,6 +446,15 @@ internal sealed class GameRenderer
                 new Vector2(sizeMeters.X * scale * 0.17f, sizeMeters.Y * scale * 0.225f),
                 rotation * 180.0f / MathF.PI,
                 new Color(48, 55, 52, 255));
+        }
+        else if (kind is SceneryKind.ParkedCar or SceneryKind.ParkedTruck)
+        {
+            Vector2 windowSize = new(sizeMeters.X * scale * 0.72f, sizeMeters.Y * scale * 0.23f);
+            Raylib.DrawRectanglePro(
+                new Rectangle(center.X, center.Y, windowSize.X, windowSize.Y),
+                windowSize * 0.5f,
+                rotation * 180.0f / MathF.PI,
+                new Color(111, 164, 178, 255));
         }
     }
 
@@ -343,7 +517,8 @@ internal sealed class GameRenderer
             origin,
             rotationDegrees,
             new Color(91, 38, 34, 180));
-        Raylib.DrawRectanglePro(body, origin, rotationDegrees, new Color(218, 69, 57, 255));
+        Raylib.DrawRectanglePro(body, origin, rotationDegrees,
+            vehicle.IsSunk ? new Color(91, 103, 101, 255) : new Color(218, 69, 57, 255));
         Raylib.DrawRectanglePro(
             new Rectangle(windshieldCenter.X, windshieldCenter.Y, width * 0.72f, length * 0.25f),
             new Vector2(width * 0.36f, length * 0.125f),
@@ -352,6 +527,10 @@ internal sealed class GameRenderer
 
         Vector2 nose = visualCenter + (VehicleMath.Forward(vehicle.RotationRadians) * length * 0.43f);
         Raylib.DrawCircleV(nose, 4.0f, Color.Gold);
+        if (vehicle.IsSunk)
+        {
+            Raylib.DrawCircleLines((int)vehicle.Position.X, (int)vehicle.Position.Y, width * 0.8f, new Color(126, 190, 211, 220));
+        }
     }
 
     private static void DrawWheels(Vehicle vehicle, float bodyRotationDegrees)
@@ -414,6 +593,11 @@ internal sealed class GameRenderer
         if (vehicle.IsExploded)
         {
             Raylib.DrawText("EXPLODED    Press R to reset", 34, 92, 24, Color.Orange);
+            return;
+        }
+        if (vehicle.IsSunk)
+        {
+            Raylib.DrawText("SUNK IN DEEP WATER    Press R to reset", 34, 92, 24, new Color(107, 190, 222, 255));
             return;
         }
         Raylib.DrawText(

@@ -73,6 +73,8 @@ internal sealed class Vehicle
 
     public bool IsExploded { get; private set; }
 
+    public bool IsSunk { get; private set; }
+
     public IReadOnlyList<ExplosionPiece> ExplosionPieces => explosionPieces;
 
     public VehicleSimulationState SimulationState { get; private set; }
@@ -92,6 +94,13 @@ internal sealed class Vehicle
                 piece.ApplyGroundResistance(fixedTimeStep);
             }
 
+            return;
+        }
+
+        if (IsSunk)
+        {
+            b2Body_SetLinearVelocity(bodyId, default);
+            b2Body_SetAngularVelocity(bodyId, 0.0f);
             return;
         }
 
@@ -160,6 +169,7 @@ internal sealed class Vehicle
 
         explosionPieces.Clear();
         IsExploded = false;
+        IsSunk = false;
         b2Body_Enable(bodyId);
         b2Body_SetTransform(bodyId, new B2Vec2(0.0f, 0.0f), b2MakeRot(0.0f));
         b2Body_SetLinearVelocity(bodyId, new B2Vec2(0.0f, 0.0f));
@@ -170,7 +180,7 @@ internal sealed class Vehicle
 
     public void Explode()
     {
-        if (IsExploded)
+        if (IsExploded || IsSunk)
         {
             return;
         }
@@ -209,6 +219,18 @@ internal sealed class Vehicle
 
         IsExploded = true;
         b2Body_Disable(bodyId);
+    }
+
+    public void Sink()
+    {
+        if (IsExploded || IsSunk)
+        {
+            return;
+        }
+
+        IsSunk = true;
+        b2Body_SetLinearVelocity(bodyId, default);
+        b2Body_SetAngularVelocity(bodyId, 0.0f);
     }
 
     private ExplosionPieceDefinition[] CreateExplosionLayout()
