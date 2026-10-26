@@ -16,11 +16,12 @@ other.
   edges and the short approach from the checkpoint to town.
 - The car can push, scatter, and spin every prop. Props rebound according to
   material and lose speed from ground resistance rather than sliding forever.
-- A car explosion violently throws all props inside the 35-metre blast radius
-  outward with force decreasing by distance. At the blast center, cones can
-  receive about 97.5 m/s, trash cans 75 m/s, crates 60 m/s, and heavy guardrail
-  sections about 41.25 m/s of immediate speed change. Even objects at the edge
-  receive a substantial outward kick.
+- A car explosion violently throws all props inside the 32-metre physical impact radius
+  outward with nonlinear distance falloff. Objects close to ground zero receive
+  much stronger speed changes than objects near the edge. At ground zero, cones
+  can receive about 100 m/s, trash cans 77 m/s, crates 62 m/s, and heavy
+  guardrail sections about 42 m/s; even objects at the edge receive an outward
+  kick.
 - Props bounce from buildings, trees, rocks, boundaries, and other props.
 - R restores every prop to its original pose.
 
@@ -45,8 +46,10 @@ other.
 - Exactly three guardrail props and eight traffic cones are present; all cones
   are confined to the checkpoint and final town approach.
 - Props have finite physical state, collide with solid world objects, respond
-  to a blast inside its radius, and remain unaffected by blasts outside it.
-- Explosion response is outward and distance-scaled.
+  to a blast inside the 32-metre impact radius, and remain unaffected by blasts
+  outside it.
+- Explosion response is outward and distance-scaled, with stronger near-center
+  acceleration than the previous linear falloff.
 - Near-blast light props launch at more than 50 m/s while heavy guardrails
   receive a visibly lower but still violent response.
 - Corner impacts do not make guardrail sections rotate continuously like tops.

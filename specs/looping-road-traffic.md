@@ -37,7 +37,9 @@ checkpoint zigzag, and dirt bypass route.
   for a total response of about 1.4 seconds, then resumes forward route-following
   and obstacle avoidance. Traffic never deliberately reverses during recovery.
 - A traffic car inside the player explosion radius leaves autopilot and becomes
-  uncontrolled dynamic wreckage thrown by the blast.
+  uncontrolled dynamic wreckage. Blast speed change rises nonlinearly from
+  about 6 m/s near the edge to 30 m/s near ground zero so close cars travel
+  substantially farther than cars near the perimeter.
 - R restores four functioning cars at newly seeded route stages.
 
 ## Technical constraints
@@ -70,7 +72,8 @@ checkpoint zigzag, and dirt bypass route.
   or intentionally driving through checkpoint props.
 - Respawn delay is always between 5 and 15 seconds and restores the inbound
   spawn pose.
-- Blast-hit vehicles stop following the route and receive finite outward motion.
+- Blast-hit vehicles stop following the route and receive finite outward motion
+  with about 6 to 30 m/s of speed change depending nonlinearly on blast distance.
 - Lateral collision velocity is not erased on the next fixed step. Route
   recovery is progressive rather than an immediate snap.
 - Obstacle avoidance examines a 14-metre forward corridor and chooses a passing
@@ -100,8 +103,9 @@ checkpoint zigzag, and dirt bypass route.
    remains disabled at the scene.
 7. Watch a following car slow, steer around the disabled car, and return to its
    route rather than joining a permanent traffic jam.
-8. Explode beside traffic and confirm affected cars are thrown off autopilot
-   while retaining animated engine fire and smoke.
+8. Explode beside traffic and confirm affected cars are thrown outward while
+   retaining animated engine fire and smoke; cars close to ground zero should
+   travel substantially farther than cars near the blast perimeter.
 9. Cause both slow and faster non-disabling bumps and confirm the driver reacts,
    brakes to a stop, then attempts to continue forward without backing up.
 

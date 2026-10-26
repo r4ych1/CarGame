@@ -33,7 +33,7 @@ internal sealed class GameWorld : IDisposable
         Vector2? playerObstacle = Vehicle.IsExploded ? null : Vehicle.PositionMeters;
         Environment.Step(fixedTimeStep, playerObstacle);
         b2World_Step(worldId, fixedTimeStep, subSteps);
-        Environment.PostPhysicsStep();
+        Environment.PostPhysicsStep(Vehicle);
     }
 
     public void ResetVehicle()

@@ -16,6 +16,8 @@ internal sealed class TrafficVehicle
 {
     internal const float ImpactResponseSeconds = 1.4f;
     internal const float UncontrolledImpactSeconds = 0.55f;
+    internal const float BlastEdgeSpeedMetersPerSecond = 6.0f;
+    internal const float BlastCenterSpeedMetersPerSecond = 30.0f;
     private readonly B2BodyId bodyId;
     private readonly IReadOnlyList<TrafficRoutePoint> route;
     private int routeIndex;
@@ -213,14 +215,18 @@ internal sealed class TrafficVehicle
         float distance = offset.Length();
         if (distance > radius) return;
         Vector2 direction = distance > 0.01f ? offset / distance : Vector2.UnitX;
-        float deltaSpeed = 24.0f + 46.0f * (1.0f - distance / radius);
+        float deltaSpeed = BlastPhysics.LaunchSpeed(
+            distance,
+            radius,
+            BlastEdgeSpeedMetersPerSecond,
+            BlastCenterSpeedMetersPerSecond);
         float mass = b2Body_GetMass(bodyId);
         IsWrecked = true;
         IsDisabled = false;
         DamageEffectAgeSeconds = 0.0f;
         RecoveryState = TrafficRecoveryState.Driving;
         b2Body_ApplyLinearImpulseToCenter(bodyId, new B2Vec2(direction.X * mass * deltaSpeed, direction.Y * mass * deltaSpeed), true);
-        b2Body_ApplyAngularImpulse(bodyId, mass * 2.2f, true);
+        b2Body_ApplyAngularImpulse(bodyId, mass * 0.7f, true);
     }
 
     private void ApplyWreckGroundResistance(float timeStep)

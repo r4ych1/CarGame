@@ -69,6 +69,15 @@ internal sealed class Vehicle
         }
     }
 
+    public Vector2 VelocityMetersPerSecond
+    {
+        get
+        {
+            B2Vec2 velocity = b2Body_GetLinearVelocity(bodyId);
+            return new(velocity.X, velocity.Y);
+        }
+    }
+
     public VehicleDefinition Definition { get; }
 
     public bool IsExploded { get; private set; }

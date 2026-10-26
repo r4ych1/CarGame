@@ -11,6 +11,8 @@ provides scenery, collision, and deterministic blast destruction.
 - Rural space contains trees, bushes, rocks, sparse buildings and shacks, plus
   parked cars and trucks. A horizontal stream crosses the complete map and the
   main road crosses it on one bridge. Town buildings form rows around streets.
+- Buildings have distinct code-drawn roofs with visible roof edges and surface
+  details.
 - A solid wall encloses every town building and its rows. The wall has one
   8-metre-wide entrance aligned with the approaching main road on its southern
   side, blocked by one movable guardrail section.
@@ -28,9 +30,14 @@ provides scenery, collision, and deterministic blast destruction.
   sinks the player car. A sunk car stops moving and ignores driving controls
   until R resets the world. It also cannot explode: Space creates no vehicle
   fragments, blast effects, crater, or environment damage while sunk.
-- The car explosion affects objects within 35 metres. Trees become dynamic
-  fallen trunks, rocks are thrown, and buildings split into rigid debris that
-  settles as rubble.
+- The car explosion has a 32-metre physical impact radius and a 16-metre deadly
+  destruction radius. Buildings inside 16 metres split into charred rigid debris
+  that settles as rubble; buildings from 16 to 32 metres remain standing with
+  visible cracks. People inside 16 metres are killed, while people farther out
+  are knocked back by physics and survive. Other destructible scenery still
+  reacts throughout the 32-metre impact radius. Building fragments look like
+  scorched chunks rather than miniature intact roofs, with irregular sizes and
+  numerous small pieces contained within the original footprint at breakup.
 - A blasted tree uses a long trunk-shaped debris body with its green canopy
   attached to the trunk's forward end. Trees receive strong outward knockback,
   high angular damping, and limited yaw so they slide and topple away from the
@@ -50,8 +57,10 @@ provides scenery, collision, and deterministic blast destruction.
 - Static colliders exist for intact solid props. Destruction removes each
   affected collider before creating dynamic debris bodies.
 - Town walls are permanent static colliders and are immune to explosions.
-- Blast impulse decreases linearly with distance and points away from the
-  explosion center. Dynamic debris receives explicit ground resistance.
+- Blast strength falls off nonlinearly with distance and points away from the
+  explosion center. Objects near ground zero receive substantially stronger
+  launches than objects near the blast edge. Dynamic debris receives explicit
+  ground resistance.
 - Environment ownership, reset, and Box2D cleanup are separate from vehicle
   dynamics and rendering.
 - The focused playable rectangle spans X -80 to 80 metres and Y -380 to 70 metres.
@@ -65,6 +74,8 @@ provides scenery, collision, and deterministic blast destruction.
 - The map includes a curved main road, town streets, one horizontal stream and
   road bridge, rural vegetation and rocks, sparse outskirts buildings and
   shacks, parked cars and trucks, and at least two rows of town buildings.
+- Buildings have shaded roof surfaces, roof edges, and visible ridge or panel
+  details.
 - Every town-row building lies inside the wall, whose only opening contains one
   physical guardrail spanning the road entrance.
 - The checkpoint has exactly two movable staggered lane barriers and one
@@ -76,10 +87,20 @@ provides scenery, collision, and deterministic blast destruction.
 - The approximately 5-metre-wide dirt bypass stays east of both checkpoint
   barriers and reconnects before the town entrance.
 - Intact solid objects collide with the vehicle.
-- Objects inside 35 metres transition exactly once to destroyed state; objects
-  outside remain intact.
+- People and buildings inside 16 metres are killed or destroyed respectively;
+  buildings in the 16-to-32-metre band stay standing and show cracks, and people
+  in that band are pushed back and survive.
+- Other blast-reactive objects inside 32 metres receive an outward physical
+  impact; objects outside remain unaffected.
 - Destroyed buildings produce multiple independently simulated pieces, trees
-  produce a knocked-over trunk, rocks become dynamic, and a crater is recorded.
+  produce charred chunks without intact roof graphics, trees produce a
+  knocked-over trunk, rocks become dynamic, and a crater is recorded.
+- Large buildings inside 16 metres fracture into at least 24 independently
+  simulated larger pieces. Their fragments vary in size and are accompanied by
+  at least 20 smaller independently simulated fragments. Pieces remain within
+  the original building footprint at breakup and launch away from ground zero
+  with speed based on their own distance from the blast center. Some fragments
+  carry short-lived fire and smoke.
 - Knocked-over trees move outward at more than 20 m/s near the blast center and
   remain below 0.55 rad/s of planar spin.
 - Debris motion is finite, outward, slows over time, and reset restores the
@@ -109,14 +130,17 @@ provides scenery, collision, and deterministic blast destruction.
 1. Drive along the curved road, across the stream bridge, and toward the town.
    Confirm both edges remain visually continuous around every bend.
 2. Confirm trees, rocks, and buildings block the car while bushes do not.
+   Confirm building roofs have visible shape and surface details.
 3. Zigzag through the two checkpoint barriers, then push or blast the town
    entrance guardrail aside, and
    confirm the remaining wall has no other opening.
 4. Alternatively, take the dirt branch after the bridge and follow it around
    the checkpoint until it rejoins the main road before town.
-5. Explode near rural props and confirm trees fall and rocks scatter.
-6. Explode beside town buildings and confirm walls separate and settle as
-   rubble while distant buildings remain intact.
+5. Explode near rural props and confirm trees fall and rocks scatter throughout
+   the impact radius.
+6. Explode near town buildings and confirm close buildings break into varied
+   charred rubble while buildings farther away show cracks but remain standing.
+   Confirm some close fragments burn and smoke briefly.
 7. Confirm a crater remains at the blast point, including when on a road.
 8. Press R and confirm the world and vehicle return to their initial state.
 9. Scroll both mouse-wheel directions and confirm the view zooms smoothly,

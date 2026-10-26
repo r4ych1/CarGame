@@ -44,6 +44,7 @@ internal static class Program
                     accumulator -= FixedTimeStep;
                 }
 
+                renderer.UpdateCamera(gameWorld.Vehicle, input, frameTime);
                 renderer.Draw(gameWorld);
             }
         }

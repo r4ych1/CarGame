@@ -15,13 +15,19 @@ outward explosion impulse.
   rotating car, then receives an outward impulse and spin.
 - Pieces move and rotate independently under Box2D. The intact vehicle is no
   longer drawn or controllable after detonation.
+- After detonation, WASD and arrow keys pan the camera around the playable map
+  at 28 metres per second instead of attempting to control the destroyed car.
 - Pressing Space again while exploded has no effect.
 - Pressing R removes every explosion piece and restores the intact car at its
   initial pose and simulation state.
 - The HUD identifies Space as the explode control and reports the exploded state.
 - Detonation produces a bright central flash and fireball, an expanding
-  concussion ring that reaches the 35-metre world blast radius, radial debris
-  streaks, and numerous smoke plumes distributed through the blast area.
+  concussion ring that reaches the 32-metre world blast radius, radial debris
+  streaks, numerous smoke plumes distributed through the blast area, and a large
+  dense ground-level smoke plume centered on the blast point.
+- The explosion's close-range deadly zone is 16 metres; its physical impact
+  radius remains 32 metres. People and buildings in the outer band are pushed
+  or cracked respectively without being killed or destroyed.
 
 ## Functional requirements
 
@@ -34,6 +40,8 @@ outward explosion impulse.
 - Explosion pieces are owned and cleaned up with the vehicle so reset does not
   leak Box2D bodies.
 - Normal vehicle force generation stops after detonation.
+- Camera navigation is clamped to the playable world boundary and resets to
+  normal vehicle-follow behavior when the vehicle is restored.
 
 ## Technical constraints and tuning
 
@@ -60,7 +68,8 @@ outward explosion impulse.
   concussion ring lasts 0.9 seconds, and smoke fades over 12 seconds. Fire
   remains a concentrated initial fireball. A separate set of smaller, dimmer
   animated ground fires is scattered through the broad smoke footprint and
-  fades during the final 3 seconds.
+  fades during the final 3 seconds. The central ground plume expands and
+  dissipates over about 10 seconds.
   Particle placement is deterministic and effect time advances on the fixed
   simulation timestep.
 
@@ -76,10 +85,14 @@ outward explosion impulse.
 - From rest, every piece initially has at least 18 m/s of radial outward
   velocity and subsequently loses speed from ground resistance.
 - Controls no longer accelerate or steer the car after detonation.
+- WASD and arrow keys move the camera after detonation, and cannot pan its
+  target outside the playable world boundary.
 - Reset destroys the fragments, restores the intact car, and permits another
   detonation.
 - The concussion ring visibly expands from the blast center, debris travels
   radially, and at least 20 smoke plumes remain after the initial fire fades.
+- A dense smoke plume covers ground zero immediately after detonation and
+  gradually grows broader and more transparent before fading away.
 - At least 20 animated ground fires remain visible after the initial 3-second
   blast phase, distributed through most of the blast area rather than clustered
   at its center.
@@ -95,9 +108,11 @@ outward explosion impulse.
 3. Hold driving controls after detonation and confirm they do not propel the
    debris.
 4. Press Space repeatedly and confirm no extra debris appears.
-5. Confirm the flash, expanding ring, debris streaks, fire, and lingering smoke
+5. Use WASD and the arrow keys after detonation; confirm the camera can inspect
+   the map while the debris remains unaffected.
+6. Confirm the flash, expanding ring, debris streaks, fire, and lingering smoke
    are visible without obscuring the complete play area.
-6. Press R, confirm all effects and debris disappear and the intact stationary car returns,
+7. Press R, confirm all effects and debris disappear and the intact stationary car returns,
    then press Space once more to confirm the feature resets.
 
 ## Non-goals

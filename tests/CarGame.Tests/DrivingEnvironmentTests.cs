@@ -233,4 +233,46 @@ public sealed class DrivingEnvironmentTests
 
         Assert.Empty(world.Environment.BlastEffects);
     }
+
+    [Fact]
+    public void CloseBlastUsesExpandedBreakupRadiusAndReducedLimbSpeed()
+    {
+        using GameWorld world = new();
+        AmbientCharacter closeCharacter = world.Environment.Characters[0];
+        Vector2 closeBlastCenter = closeCharacter.PositionMeters - new Vector2(9.0f, 0.0f);
+
+        closeCharacter.ApplyBlast(
+            closeBlastCenter,
+            DrivingEnvironment.BlastRadiusMeters,
+            DrivingEnvironment.DeadlyBlastRadiusMeters);
+
+        Assert.Equal(10.0f, AmbientCharacter.LimbBurstRadiusMeters);
+        Assert.True(closeCharacter.HasExplodedIntoLimbs);
+        Assert.Equal(6, closeCharacter.LimbFragments.Count);
+        Assert.All(closeCharacter.LimbFragments, limb =>
+            Assert.InRange(limb.LinearVelocityMetersPerSecond.Length(), 4.0f, 15.8f));
+        Assert.All(closeCharacter.LimbFragments, limb => Assert.False(limb.HasBloodPool));
+
+        closeCharacter.Step(0.76f);
+        Assert.All(closeCharacter.LimbFragments, limb =>
+        {
+            Assert.True(limb.HasBloodPool);
+            Assert.True(limb.BloodPoolRadiusMeters > 0.0f);
+            Assert.Equal(limb.PositionMeters, limb.BloodPoolPositionMeters);
+        });
+
+        float initialPoolRadius = closeCharacter.LimbFragments[0].BloodPoolRadiusMeters;
+        closeCharacter.Step(0.8f);
+        Assert.True(closeCharacter.LimbFragments[0].BloodPoolRadiusMeters > initialPoolRadius);
+
+        AmbientCharacter fartherCharacter = world.Environment.Characters[1];
+        Vector2 fartherBlastCenter = fartherCharacter.PositionMeters - new Vector2(10.1f, 0.0f);
+        fartherCharacter.ApplyBlast(
+            fartherBlastCenter,
+            DrivingEnvironment.BlastRadiusMeters,
+            DrivingEnvironment.DeadlyBlastRadiusMeters);
+
+        Assert.True(fartherCharacter.IsDead);
+        Assert.False(fartherCharacter.HasExplodedIntoLimbs);
+    }
 }

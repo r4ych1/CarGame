@@ -210,6 +210,32 @@ public sealed class TrafficSystemTests
     }
 
     [Fact]
+    public void TrafficBlastSpeedIsStrongestNearGroundZero()
+    {
+        const float radiusMeters = 32.0f;
+        float centerSpeed = BlastPhysics.LaunchSpeed(
+            0.0f,
+            radiusMeters,
+            TrafficVehicle.BlastEdgeSpeedMetersPerSecond,
+            TrafficVehicle.BlastCenterSpeedMetersPerSecond);
+        float middleSpeed = BlastPhysics.LaunchSpeed(
+            radiusMeters * 0.5f,
+            radiusMeters,
+            TrafficVehicle.BlastEdgeSpeedMetersPerSecond,
+            TrafficVehicle.BlastCenterSpeedMetersPerSecond);
+        float edgeSpeed = BlastPhysics.LaunchSpeed(
+            radiusMeters,
+            radiusMeters,
+            TrafficVehicle.BlastEdgeSpeedMetersPerSecond,
+            TrafficVehicle.BlastCenterSpeedMetersPerSecond);
+
+        Assert.Equal(30.0f, centerSpeed);
+        Assert.Equal(6.0f, edgeSpeed);
+        Assert.InRange(middleSpeed, edgeSpeed, centerSpeed);
+        Assert.True(centerSpeed - middleSpeed > middleSpeed - edgeSpeed);
+    }
+
+    [Fact]
     public void FrontalAndSevereHighSpeedImpactsDisableButLightNudgesDoNot()
     {
         Assert.True(TrafficVehicle.IsDisablingImpact(

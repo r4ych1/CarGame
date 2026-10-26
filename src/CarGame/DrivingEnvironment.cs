@@ -11,6 +11,16 @@ internal enum SceneryKind { Tree, Bush, Rock, Building, Shack, ParkedCar, Parked
 internal enum PhysicsPropKind { TrashCan, GuardRail, TrafficCone, Crate }
 internal readonly record struct WallSegment(Vector2 PositionMeters, Vector2 SizeMeters);
 
+internal static class BlastPhysics
+{
+    public static float LaunchSpeed(float distanceMeters, float radiusMeters, float edgeSpeed, float centerSpeed)
+    {
+        float proximity = Math.Clamp(1.0f - (distanceMeters / radiusMeters), 0.0f, 1.0f);
+        float falloff = MathF.Pow(proximity, 1.6f);
+        return edgeSpeed + (centerSpeed - edgeSpeed) * falloff;
+    }
+}
+
 internal sealed class PhysicsProp
 {
     private readonly B2BodyId bodyId;
@@ -75,14 +85,14 @@ internal sealed class PhysicsProp
         float distance = offset.Length();
         if (distance > radius) return;
         Vector2 direction = distance > 0.01f ? offset / distance : Vector2.UnitX;
-        float materialScale = Kind switch
+        (float edgeSpeed, float centerSpeed) = Kind switch
         {
-            PhysicsPropKind.TrafficCone => 1.30f,
-            PhysicsPropKind.TrashCan => 1.00f,
-            PhysicsPropKind.Crate => 0.80f,
-            _ => 0.55f,
+            PhysicsPropKind.TrafficCone => (15.0f, 100.0f),
+            PhysicsPropKind.TrashCan => (12.0f, 77.0f),
+            PhysicsPropKind.Crate => (10.0f, 62.0f),
+            _ => (7.5f, 42.0f),
         };
-        float deltaSpeed = (20.0f + 55.0f * (1.0f - distance / radius)) * materialScale;
+        float deltaSpeed = BlastPhysics.LaunchSpeed(distance, radius, edgeSpeed, centerSpeed);
         float mass = b2Body_GetMass(bodyId);
         b2Body_ApplyLinearImpulseToCenter(bodyId, new B2Vec2(direction.X * deltaSpeed * mass, direction.Y * deltaSpeed * mass), true);
         float spinScale = Kind == PhysicsPropKind.GuardRail ? 0.03f : 1.0f;
@@ -118,6 +128,7 @@ internal sealed class BlastVisualEffect
         Smoke = CreateParticles(28, 31.0f, 2.4f, 0.7f);
         Fire = CreateParticles(18, 10.0f, 8.0f, 0.0f);
         GroundFire = CreateParticles(22, 30.0f, 0.0f, 1.0f);
+        GroundSmoke = CreateParticles(25, 5.0f, 0.8f, 0.0f);
         Debris = CreateParticles(36, 5.0f, 22.0f, 0.0f);
     }
 
@@ -126,6 +137,7 @@ internal sealed class BlastVisualEffect
     public IReadOnlyList<BlastParticle> Smoke { get; }
     public IReadOnlyList<BlastParticle> Fire { get; }
     public IReadOnlyList<BlastParticle> GroundFire { get; }
+    public IReadOnlyList<BlastParticle> GroundSmoke { get; }
     public IReadOnlyList<BlastParticle> Debris { get; }
     public bool IsFinished => AgeSeconds >= 12.0f;
     public void Step(float timeStep) => AgeSeconds += timeStep;
@@ -158,16 +170,26 @@ internal sealed class SceneryObject
     public B2BodyId BodyId { get; set; }
     public bool HasBody { get; set; }
     public bool IsDestroyed { get; set; }
+    public bool IsCracked { get; set; }
 }
 
 internal sealed class WorldDebris
 {
     private readonly B2BodyId bodyId;
 
-    public WorldDebris(B2WorldId worldId, SceneryKind kind, Vector2 position, Vector2 size, float rotation, Vector2 velocity, float spin)
+    public WorldDebris(
+        B2WorldId worldId,
+        SceneryKind kind,
+        Vector2 position,
+        Vector2 size,
+        float rotation,
+        Vector2 velocity,
+        float spin,
+        bool hasFireSmoke = false)
     {
         Kind = kind;
         SizeMeters = size;
+        HasFireSmoke = hasFireSmoke;
         B2BodyDef bodyDefinition = b2DefaultBodyDef();
         bodyDefinition.type = B2BodyType.b2_dynamicBody;
         bodyDefinition.position = new B2Vec2(position.X, position.Y);
@@ -185,6 +207,8 @@ internal sealed class WorldDebris
 
     public SceneryKind Kind { get; }
     public Vector2 SizeMeters { get; }
+    public bool HasFireSmoke { get; }
+    public float AgeSeconds { get; private set; }
     public Vector2 PositionMeters { get { B2Vec2 p = b2Body_GetPosition(bodyId); return new(p.X, p.Y); } }
     public Vector2 LinearVelocityMetersPerSecond { get { B2Vec2 v = b2Body_GetLinearVelocity(bodyId); return new(v.X, v.Y); } }
     public float RotationRadians => Box2D.NET.B2MathFunction.b2Rot_GetAngle(b2Body_GetRotation(bodyId));
@@ -192,6 +216,7 @@ internal sealed class WorldDebris
 
     public void Step(float timeStep)
     {
+        AgeSeconds += timeStep;
         if (Kind == SceneryKind.Tree)
         {
             b2Body_SetAngularVelocity(bodyId, Math.Clamp(b2Body_GetAngularVelocity(bodyId), -0.55f, 0.55f));
@@ -211,7 +236,9 @@ internal sealed class WorldDebris
 
 internal sealed class DrivingEnvironment
 {
-    public const float BlastRadiusMeters = 35.0f;
+    public const float BlastRadiusMeters = 32.0f;
+    public const float DeadlyBlastRadiusMeters = 16.0f;
+    private const float ExplosionPanicRadiusMeters = BlastRadiusMeters + 12.0f;
     public static readonly Vector2 BoundaryMinimumMeters = new(-80.0f, -380.0f);
     public static readonly Vector2 BoundaryMaximumMeters = new(80.0f, 70.0f);
     public const float StreamCenterYMeters = -120.0f;
@@ -246,6 +273,7 @@ internal sealed class DrivingEnvironment
     private readonly List<BlastVisualEffect> blastEffects = [];
     private readonly List<PhysicsProp> props = [];
     private readonly List<WallSegment> townWalls = [];
+    private readonly List<AmbientCharacter> characters = [];
 
     public DrivingEnvironment(B2WorldId worldId)
     {
@@ -254,6 +282,7 @@ internal sealed class DrivingEnvironment
         CreateTownWalls();
         Build();
         BuildProps();
+        BuildCharacters();
         Traffic = new TrafficSystem(worldId);
     }
 
@@ -263,6 +292,7 @@ internal sealed class DrivingEnvironment
     public IReadOnlyList<BlastVisualEffect> BlastEffects => blastEffects;
     public IReadOnlyList<PhysicsProp> Props => props;
     public IReadOnlyList<WallSegment> TownWalls => townWalls;
+    public IReadOnlyList<AmbientCharacter> Characters => characters;
     public static IReadOnlyList<Vector2> DirtRoadPointsMeters => dirtRoadPointsMeters;
     public TrafficSystem Traffic { get; }
     public float WaterFlowAgeSeconds { get; private set; }
@@ -270,6 +300,8 @@ internal sealed class DrivingEnvironment
     public void Step(float timeStep, Vector2? playerObstacleMeters = null)
     {
         WaterFlowAgeSeconds += timeStep;
+        UpdateCharacterFear();
+        foreach (AmbientCharacter character in characters) character.Step(timeStep);
         foreach (WorldDebris item in debris) item.Step(timeStep);
         foreach (BlastVisualEffect effect in blastEffects) effect.Step(timeStep);
         foreach (PhysicsProp prop in props) prop.Step(timeStep);
@@ -288,12 +320,70 @@ internal sealed class DrivingEnvironment
         blastEffects.RemoveAll(effect => effect.IsFinished);
     }
 
-    public void PostPhysicsStep() => Traffic.PostPhysicsStep();
+    public void PostPhysicsStep(Vehicle playerVehicle)
+    {
+        foreach (AmbientCharacter character in characters)
+        {
+            if (!playerVehicle.IsExploded && !playerVehicle.IsSunk)
+            {
+                character.TryFleeFromVehicle(
+                    playerVehicle.PositionMeters,
+                    playerVehicle.VelocityMetersPerSecond,
+                    10.0f);
+            }
+
+            if (character.IsDead)
+            {
+                continue;
+            }
+
+            if (!playerVehicle.IsExploded && !playerVehicle.IsSunk && playerVehicle.SpeedMetersPerSecond > 2.0f &&
+                character.IsOverlappedByVehicle(
+                    playerVehicle.PositionMeters,
+                    playerVehicle.RotationRadians,
+                    new Vector2(
+                        playerVehicle.Definition.Chassis.WidthMeters,
+                        playerVehicle.Definition.Chassis.LengthMeters)))
+            {
+                character.Die();
+                continue;
+            }
+
+            foreach (TrafficVehicle trafficVehicle in Traffic.Vehicles)
+            {
+                if (trafficVehicle.IsActive)
+                {
+                    character.TryFleeFromVehicle(
+                        trafficVehicle.PositionMeters,
+                        trafficVehicle.LinearVelocityMetersPerSecond,
+                        10.0f);
+                }
+
+                if (trafficVehicle.IsActive && trafficVehicle.LinearVelocityMetersPerSecond.Length() > 2.0f &&
+                    character.IsOverlappedByVehicle(
+                        trafficVehicle.PositionMeters,
+                        trafficVehicle.RotationRadians,
+                        trafficVehicle.SizeMeters))
+                {
+                    character.Die();
+                    break;
+                }
+            }
+        }
+
+        Traffic.PostPhysicsStep();
+    }
 
     public void Explode(Vector2 center)
     {
         craters.Add(center);
         blastEffects.Add(new(center));
+        foreach (AmbientCharacter character in characters)
+        {
+            character.ReactToExplosion(center, ExplosionPanicRadiusMeters);
+            character.ApplyBlast(center, BlastRadiusMeters, DeadlyBlastRadiusMeters);
+        }
+
         foreach (PhysicsProp prop in props) prop.ApplyBlast(center, BlastRadiusMeters);
         Traffic.ApplyBlast(center, BlastRadiusMeters);
         foreach (SceneryObject item in scenery)
@@ -302,33 +392,144 @@ internal sealed class DrivingEnvironment
             Vector2 offset = item.PositionMeters - center;
             float distance = offset.Length();
             if (distance > BlastRadiusMeters) continue;
+            if (item.Kind is SceneryKind.Building or SceneryKind.Shack && distance > DeadlyBlastRadiusMeters)
+            {
+                item.IsCracked = true;
+                continue;
+            }
+
             item.IsDestroyed = true;
             if (item.HasBody) { b2DestroyBody(item.BodyId); item.HasBody = false; }
             if (item.Kind == SceneryKind.Bush) continue;
             Vector2 direction = distance > 0.01f ? offset / distance : Vector2.UnitX;
-            float speed = 4.0f + (14.0f * (1.0f - (distance / BlastRadiusMeters)));
-            if (item.Kind == SceneryKind.Tree) speed *= 1.3f;
-            int count = item.Kind switch
+            if (item.Kind is SceneryKind.Building or SceneryKind.Shack)
             {
-                SceneryKind.Building or SceneryKind.Shack => 6,
-                SceneryKind.ParkedTruck => 4,
-                SceneryKind.ParkedCar => 3,
-                _ => 1,
+                CreateBuildingDebris(item, center, direction);
+                continue;
+            }
+
+            (int columns, int rows) = item.Kind switch
+            {
+                SceneryKind.ParkedTruck or SceneryKind.ParkedCar => (2, 2),
+                _ => (1, 1),
             };
+            int count = columns * rows;
+            Vector2 fragmentSize = item.Kind == SceneryKind.Tree
+                ? new Vector2(0.7f, 5.5f)
+                : item.SizeMeters * new Vector2(0.86f / columns, 0.86f / rows);
             for (int index = 0; index < count; index++)
             {
-                float angle = (index - ((count - 1) * 0.5f)) * 0.28f;
-                Vector2 launch = Vector2.Transform(direction, Matrix3x2.CreateRotation(angle)) * speed;
-                Vector2 size = item.Kind == SceneryKind.Tree
-                    ? new Vector2(0.7f, 5.5f)
-                    : count == 1 ? item.SizeMeters : item.SizeMeters * new Vector2(0.28f, 0.42f);
-                Vector2 position = count == 1
-                    ? item.PositionMeters
-                    : item.PositionMeters + new Vector2((index % 3 - 1) * size.X, (index / 3 - 0.5f) * size.Y);
-                float spin = item.Kind == SceneryKind.Tree ? 0.35f : (index - 2.5f) * 1.4f;
-                debris.Add(new(worldId, item.Kind, position, size, item.RotationRadians, launch, spin));
+                int column = index % columns;
+                int row = index / columns;
+                Vector2 localOffset = columns == 1 && rows == 1
+                    ? Vector2.Zero
+                    : new Vector2(
+                        ((column + 0.5f) / columns - 0.5f) * item.SizeMeters.X,
+                        ((row + 0.5f) / rows - 0.5f) * item.SizeMeters.Y);
+                Vector2 position = item.PositionMeters + Vector2.Transform(localOffset, Matrix3x2.CreateRotation(item.RotationRadians));
+                Vector2 fragmentOffset = position - center;
+                float fragmentDistance = fragmentOffset.Length();
+                Vector2 fragmentDirection = fragmentDistance > 0.01f ? fragmentOffset / fragmentDistance : direction;
+                float edgeSpeed = item.Kind == SceneryKind.Tree ? 8.0f : 4.0f;
+                float centerSpeed = item.Kind == SceneryKind.Tree ? 70.0f : 56.0f;
+                float speed = BlastPhysics.LaunchSpeed(fragmentDistance, BlastRadiusMeters, edgeSpeed, centerSpeed);
+                float spin = item.Kind == SceneryKind.Tree ? 0.35f : ((column - (columns - 1) * 0.5f) + (row - (rows - 1) * 0.5f)) * 1.4f;
+                debris.Add(new(worldId, item.Kind, position, fragmentSize, item.RotationRadians, fragmentDirection * speed, spin));
             }
         }
+    }
+
+    private void UpdateCharacterFear()
+    {
+        for (int observerIndex = 0; observerIndex < characters.Count; observerIndex++)
+        {
+            AmbientCharacter observer = characters[observerIndex];
+            if (observer.IsDead) continue;
+
+            for (int corpseIndex = 0; corpseIndex < characters.Count; corpseIndex++)
+            {
+                AmbientCharacter corpse = characters[corpseIndex];
+                if (!corpse.IsDead || observerIndex == corpseIndex) continue;
+
+                if (corpse.HasExplodedIntoLimbs)
+                {
+                    foreach (CharacterLimb limb in corpse.LimbFragments)
+                    {
+                        observer.TryFleeFromCorpse(limb.PositionMeters, 8.0f);
+                        if (observer.IsPanicking) break;
+                    }
+                }
+                else
+                {
+                    observer.TryFleeFromCorpse(corpse.PositionMeters, 8.0f);
+                }
+
+                if (observer.IsPanicking) break;
+            }
+        }
+    }
+
+    private void CreateBuildingDebris(SceneryObject building, Vector2 blastCenter, Vector2 fallbackDirection)
+    {
+        bool isLargeBuilding = building.Kind == SceneryKind.Building &&
+            building.SizeMeters.X * building.SizeMeters.Y >= 100.0f;
+        int largeFragmentCount = isLargeBuilding ? 24 : building.Kind == SceneryKind.Building ? 18 : 12;
+        const int smallFragmentCount = 24;
+        uint randomState = unchecked(
+            (uint)(MathF.Abs(building.PositionMeters.X) * 1009.0f + MathF.Abs(building.PositionMeters.Y) * 9176.0f +
+                building.SizeMeters.X * 6113.0f + building.SizeMeters.Y * 3571.0f));
+        if (randomState == 0) randomState = 0xA341316Cu;
+
+        for (int index = 0; index < largeFragmentCount + smallFragmentCount; index++)
+        {
+            bool isSmallFragment = index >= largeFragmentCount;
+            float sizeX;
+            float sizeY;
+            if (isSmallFragment)
+            {
+                sizeX = 0.18f + NextDeterministicUnit(ref randomState) * 0.48f;
+                sizeY = 0.18f + NextDeterministicUnit(ref randomState) * 0.48f;
+            }
+            else
+            {
+                float widthRatio = 0.12f + NextDeterministicUnit(ref randomState) * 0.18f;
+                float lengthRatio = 0.12f + NextDeterministicUnit(ref randomState) * 0.18f;
+                sizeX = MathF.Min(building.SizeMeters.X * widthRatio, building.SizeMeters.X * 0.32f);
+                sizeY = MathF.Min(building.SizeMeters.Y * lengthRatio, building.SizeMeters.Y * 0.32f);
+            }
+
+            Vector2 fragmentSize = new(
+                MathF.Min(sizeX, building.SizeMeters.X),
+                MathF.Min(sizeY, building.SizeMeters.Y));
+            Vector2 localPosition = new(
+                (NextDeterministicUnit(ref randomState) - 0.5f) * (building.SizeMeters.X - fragmentSize.X),
+                (NextDeterministicUnit(ref randomState) - 0.5f) * (building.SizeMeters.Y - fragmentSize.Y));
+            Vector2 position = building.PositionMeters +
+                Vector2.Transform(localPosition, Matrix3x2.CreateRotation(building.RotationRadians));
+            Vector2 outwardOffset = position - blastCenter;
+            float fragmentDistance = outwardOffset.Length();
+            Vector2 direction = fragmentDistance > 0.01f ? outwardOffset / fragmentDistance : fallbackDirection;
+            float speed = BlastPhysics.LaunchSpeed(fragmentDistance, BlastRadiusMeters, 4.0f, 56.0f);
+            float spin = (NextDeterministicUnit(ref randomState) - 0.5f) * (isSmallFragment ? 9.0f : 5.0f);
+            bool hasFireSmoke = isSmallFragment ? index % 8 == 0 : index % 4 == 1;
+            debris.Add(new(
+                worldId,
+                building.Kind,
+                position,
+                fragmentSize,
+                building.RotationRadians,
+                direction * speed,
+                spin,
+                hasFireSmoke));
+        }
+    }
+
+    private static float NextDeterministicUnit(ref uint state)
+    {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return (state >> 8) * (1.0f / 16777216.0f);
     }
 
     public void Reset()
@@ -336,7 +537,8 @@ internal sealed class DrivingEnvironment
         foreach (SceneryObject item in scenery) if (item.HasBody) b2DestroyBody(item.BodyId);
         foreach (WorldDebris item in debris) item.Destroy();
         foreach (PhysicsProp prop in props) prop.Destroy();
-        scenery.Clear(); debris.Clear(); craters.Clear(); blastEffects.Clear(); props.Clear(); Build(); BuildProps();
+        foreach (AmbientCharacter character in characters) character.Destroy();
+        scenery.Clear(); debris.Clear(); craters.Clear(); blastEffects.Clear(); props.Clear(); characters.Clear(); Build(); BuildProps(); BuildCharacters();
         WaterFlowAgeSeconds = 0.0f;
         Traffic.Reset();
     }
@@ -498,6 +700,125 @@ internal sealed class DrivingEnvironment
             AddProp(PhysicsPropKind.TrashCan, new(12.0f, y + 3.0f), new(0.9f, 1.1f), -0.06f * row);
             AddProp(PhysicsPropKind.Crate, new(-35.0f, y + 2.0f), new(1.25f, 1.25f), 0.12f * row);
             AddProp(PhysicsPropKind.Crate, new(34.0f, y - 3.0f), new(1.1f, 1.1f), -0.1f * row);
+        }
+    }
+
+    private void BuildCharacters()
+    {
+        ColorRgb[] clothingColors =
+        [
+            new(54, 105, 145),
+            new(171, 91, 67),
+            new(93, 133, 82),
+            new(194, 160, 88),
+            new(105, 87, 139),
+            new(66, 128, 120),
+            new(161, 125, 91),
+            new(174, 177, 168),
+        ];
+        ColorRgb[] skinColors =
+        [
+            new(231, 190, 149),
+            new(194, 139, 104),
+            new(139, 91, 67),
+            new(239, 207, 174),
+        ];
+        int characterIndex = 0;
+
+        void AddResident(Vector2 position, float heading, CharacterActivity activity)
+        {
+            characters.Add(new AmbientCharacter(
+                worldId,
+                activity,
+                position,
+                heading,
+                clothingColors[characterIndex % clothingColors.Length],
+                skinColors[(characterIndex * 3) % skinColors.Length],
+                characterIndex * 0.73f));
+            characterIndex++;
+        }
+
+        void AddWalker(Vector2[] path)
+        {
+            characters.Add(new AmbientCharacter(
+                worldId,
+                CharacterActivity.Walking,
+                path[0],
+                0.0f,
+                clothingColors[characterIndex % clothingColors.Length],
+                skinColors[(characterIndex * 3) % skinColors.Length],
+                characterIndex * 0.61f,
+                1.5f + (characterIndex % 4) * 0.27f,
+                path));
+            characterIndex++;
+        }
+
+        float[] roadsideY = [-40.0f, -61.0f, -82.0f, -143.0f, -168.0f, -193.0f];
+        for (int index = 0; index < roadsideY.Length; index++)
+        {
+            float y = roadsideY[index];
+            float roadX = RoadCenterXMeters(y);
+            float side = index % 2 == 0 ? 1.0f : -1.0f;
+            float shoulderX = roadX + side * 7.5f;
+            AddResident(new(shoulderX, y), side > 0.0f ? MathF.PI : 0.0f,
+                index % 2 == 0 ? CharacterActivity.Standing : CharacterActivity.Working);
+            AddWalker(
+            [
+                new(roadX - side * 7.5f, y - 2.2f),
+                new(roadX - side * 8.5f, y),
+                new(roadX - side * 7.5f, y + 2.2f),
+            ]);
+        }
+
+        AddResident(new(-26.0f, -99.0f), 0.0f, CharacterActivity.Standing);
+        AddResident(new(-26.0f, -111.0f), MathF.PI * 0.5f, CharacterActivity.Working);
+        AddResident(new(-34.0f, -68.0f), MathF.PI, CharacterActivity.Standing);
+        AddResident(new(-34.0f, -76.0f), 0.0f, CharacterActivity.Talking);
+        AddResident(new(-36.0f, -160.0f), 0.0f, CharacterActivity.Standing);
+        AddResident(new(-36.0f, -170.0f), MathF.PI, CharacterActivity.Working);
+        AddResident(new(-35.0f, -181.0f), 0.0f, CharacterActivity.Talking);
+        AddResident(new(-35.0f, -188.0f), MathF.PI, CharacterActivity.Standing);
+
+        for (int row = 0; row < 4; row++)
+        {
+            float y = -265.0f - row * 16.0f;
+            float northSide = y - 5.8f;
+            float southSide = y + 5.8f;
+            AddResident(new(-27.0f, northSide), MathF.PI * 0.5f, CharacterActivity.Standing);
+            AddResident(new(-9.0f, northSide), 0.0f, CharacterActivity.Working);
+            AddResident(new(9.0f, southSide), MathF.PI, CharacterActivity.Standing);
+            AddResident(new(27.0f, southSide), -MathF.PI * 0.5f, CharacterActivity.Working);
+            AddResident(new(-27.0f, southSide), MathF.PI * 0.5f, CharacterActivity.Standing);
+            AddResident(new(27.0f, northSide), -MathF.PI * 0.5f, CharacterActivity.Standing);
+
+            if (row % 2 == 0)
+            {
+                float gatheringY = y + 2.0f;
+                AddResident(new(-5.0f, gatheringY), 0.0f, CharacterActivity.Talking);
+                AddResident(new(-3.5f, gatheringY), MathF.PI, CharacterActivity.Talking);
+            }
+
+            AddWalker(
+            [
+                new(-9.5f, y - 7.0f),
+                new(-8.0f, y - 7.0f),
+                new(-8.0f, y + 7.0f),
+                new(-9.5f, y + 7.0f),
+            ]);
+            AddWalker(
+            [
+                new(8.0f, y + 7.0f),
+                new(9.5f, y + 7.0f),
+                new(9.5f, y - 7.0f),
+                new(8.0f, y - 7.0f),
+            ]);
+            AddWalker(
+            [
+                new(-9.0f, y - 1.0f),
+                new(9.0f, y - 1.0f),
+                new(9.0f, y + 1.0f),
+                new(-9.0f, y + 1.0f),
+            ]);
         }
     }
 
