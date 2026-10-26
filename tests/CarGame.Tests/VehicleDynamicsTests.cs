@@ -168,6 +168,36 @@ public sealed class VehicleDynamicsTests
     }
 
     [Fact]
+    public void ClosedThrottleAppliesEngineBrakingThroughDrivenWheels()
+    {
+        VehicleDefinition definition = VehicleCatalog.FirstCar;
+        const float roadSpeed = 5.0f;
+        float rollingAngularSpeed = roadSpeed / definition.Tires.WheelRadiusMeters;
+        VehicleSimulationState state = WithAllWheelSpeeds(
+            VehicleDynamics.CreateInitialState(definition),
+            rollingAngularSpeed);
+        ChassisSample moving = new(VehicleMath.Forward(0.0f) * roadSpeed, 0.0f, 0.0f);
+
+        DynamicsStepResult firstStep = VehicleDynamics.Step(
+            definition,
+            state,
+            moving,
+            default,
+            FixedTimeStep);
+        DynamicsStepResult secondStep = VehicleDynamics.Step(
+            definition,
+            firstStep.State,
+            moving,
+            default,
+            FixedTimeStep);
+
+        Assert.True(firstStep.State.Wheels.FrontLeft.AngularSpeedRadiansPerSecond < rollingAngularSpeed);
+        Assert.True(secondStep.Diagnostics.Wheels.FrontLeft.LongitudinalForceNewtons < 0.0f);
+        Assert.True(secondStep.Diagnostics.Wheels.FrontRight.LongitudinalForceNewtons < 0.0f);
+        Assert.Equal(0.0f, secondStep.Diagnostics.Wheels.RearLeft.LongitudinalForceNewtons, Tolerance);
+    }
+
+    [Fact]
     public void AutomaticShiftUsesTorqueCutAndOneGearTransition()
     {
         VehicleDefinition definition = VehicleCatalog.FirstCar;

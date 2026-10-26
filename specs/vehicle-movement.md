@@ -9,7 +9,8 @@ simulation.
 ## Player-visible behavior
 
 - The game opens with a car centered in a camera-followed test grid.
-- `W` or Up accelerates forward; `S` or Down brakes and reverses.
+- `W` or Up accelerates forward; `S` or Down brakes and reverses. The simulation supports
+  a dedicated brake without selecting reverse.
 - `A`/`D` or Left/Right steer. Steering has no effect while stationary and
   reverses direction when the car is backing up.
 - The front wheels visibly steer and generate turning force at the front axle;

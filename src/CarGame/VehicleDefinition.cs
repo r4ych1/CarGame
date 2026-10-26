@@ -44,7 +44,9 @@ internal sealed record ChassisSettings(
     float AerodynamicDragNewtonsPerSpeedSquared,
     float MaximumSteeringAngleDegrees,
     float HighSpeedSteeringScale,
-    float YawDampingPerSecond)
+    float YawDampingPerSecond,
+    float RestLinearSpeedMetersPerSecond,
+    float RestAngularSpeedRadiansPerSecond)
 {
     public void Validate()
     {
@@ -62,6 +64,8 @@ internal sealed record ChassisSettings(
         Validation.Range(MaximumSteeringAngleDegrees, 0.0f, 89.0f, nameof(MaximumSteeringAngleDegrees));
         Validation.Fraction(HighSpeedSteeringScale, nameof(HighSpeedSteeringScale));
         Validation.NonNegative(YawDampingPerSecond, nameof(YawDampingPerSecond));
+        Validation.NonNegative(RestLinearSpeedMetersPerSecond, nameof(RestLinearSpeedMetersPerSecond));
+        Validation.NonNegative(RestAngularSpeedRadiansPerSecond, nameof(RestAngularSpeedRadiansPerSecond));
     }
 }
 
@@ -121,6 +125,7 @@ internal sealed record PowertrainSettings(
     float IdleRevolutionsPerMinute,
     float RedlineRevolutionsPerMinute,
     float DrivelineEfficiency,
+    float EngineBrakingTorqueNewtonMeters,
     ImmutableArray<EngineTorquePoint> TorqueCurve)
 {
     public void Validate()
@@ -133,6 +138,7 @@ internal sealed record PowertrainSettings(
         }
 
         Validation.FractionExclusive(DrivelineEfficiency, nameof(DrivelineEfficiency));
+        Validation.NonNegative(EngineBrakingTorqueNewtonMeters, nameof(EngineBrakingTorqueNewtonMeters));
         if (TorqueCurve.Length < 2)
         {
             throw new ArgumentException("The torque curve needs at least two points.", nameof(TorqueCurve));

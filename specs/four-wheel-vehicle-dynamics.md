@@ -6,7 +6,9 @@ Replace the axle-level bicycle model with a deterministic four-contact-patch
 model while retaining one Box2D chassis. Simulate individual wheel rotation,
 nonlinear combined-slip tires, sprung-body load transfer, an automatic geared
 front-wheel-drive powertrain with an open differential, and always-enabled ABS.
-The feature preserves the existing WASD controls and fixed 60 Hz update.
+The feature preserves the existing WASD controls and retains the fixed 60 Hz
+update. The service-brake simulation remains available to deterministic
+callers, but Space is reserved for the vehicle explosion.
 
 The First Car remains a fictional 1,300 kg front-engine hatchback tuned for a
 stable real-time game rather than manufacturer accuracy. Earlier vehicle specs
@@ -83,7 +85,8 @@ engine RPM, shift state, heave, roll, and pitch.
 ## Powertrain, direction selection, and braking
 
 - The engine uses a piecewise-linear torque curve, 850 RPM idle, 6,500 RPM
-  redline, and automatic shift thresholds near 5,800/1,800 RPM.
+  redline, automatic shift thresholds near 5,800/1,800 RPM, and explicit
+  closed-throttle engine-braking torque.
 - Forward ratios are 3.55, 2.10, 1.36, 1.03, and 0.82; final drive is 3.90 and
   reverse is 3.40. Driveline efficiency, wheel radius, and wheel inertia are
   explicit definition values.
@@ -95,6 +98,15 @@ engine RPM, shift state, heave, roll, and pitch.
 - W requests forward drive except while braking a reversing car. S brakes a
   forward-moving car and selects reverse only near rest; W behaves symmetrically
   while reversing.
+- A direct service-brake input applies the brakes independently of the selected
+  travel direction. Braking takes priority over simultaneous throttle input
+  and does not select reverse. It has no keyboard binding in the prototype.
+- Releasing the accelerator while moving in gear applies engine braking through
+  the driven front wheels. Its strength follows the engaged gear ratio, so the
+  car slows noticeably faster than a free-rolling chassis without matching the
+  stronger service brake.
+- With no forward or reverse request, chassis motion below 0.5 m/s (1.8 km/h)
+  and 0.1 rad/s settles to a complete stop, including residual wheel rotation.
 - Existing 12 kN braking capability becomes wheel brake torque using tire
   radius and a 68/32 front/rear bias.
 - Each wheel has an independent always-enabled ABS modulator. It rapidly
@@ -126,6 +138,12 @@ engine RPM, shift state, heave, roll, and pitch.
 - Automatic shifts observe thresholds and hysteresis, perform one ratio change
   per shift, and interrupt drive torque. Reverse engages only near rest and
   engine RPM remains finite and bounded.
+- Direct service-brake input slows a moving car through the existing four-wheel brake and ABS model
+  without changing a forward gear into reverse.
+- With no pedal input, an in-gear moving car produces driven-wheel force that
+  opposes travel and reduces speed more quickly than road resistance alone.
+- Coast-down reaches exactly zero linear and angular speed instead of retaining
+  persistent motion near 1 km/h.
 - ABS can release and reapply each wheel independently and avoids sustained
   wheel lock in a deterministic hard-stop scenario.
 - Steering alone cannot rotate a stationary chassis. Forward and reverse
@@ -142,8 +160,9 @@ engine RPM, shift state, heave, roll, and pitch.
 
 1. Hold a steady medium-speed turn and observe higher outside-wheel loads and a
    subtle, bounded chassis roll visual.
-2. Accelerate and brake in a straight line; confirm opposite pitch directions,
-   visible automatic up/down shifts, and stable near-rest reverse selection.
+2. Accelerate and brake with S in a straight line; confirm opposite pitch
+   directions, visible automatic up/down shifts, and no unintended reverse
+   selection. Confirm S still brakes before selecting reverse near rest.
 3. Apply full throttle while cornering; confirm front grip is consumed and the
    car progressively runs wide. Confirm an unloaded driven wheel limits both
    sides through the open differential.

@@ -33,13 +33,18 @@ internal static class Program
                     accumulator = 0.0;
                 }
 
+                else if (Raylib.IsKeyPressed(KeyboardKey.Space))
+                {
+                    gameWorld.ExplodeVehicle();
+                }
+
                 while (accumulator >= FixedTimeStep)
                 {
                     gameWorld.Step(input, (float)FixedTimeStep, PhysicsSubSteps);
                     accumulator -= FixedTimeStep;
                 }
 
-                renderer.Draw(gameWorld.Vehicle);
+                renderer.Draw(gameWorld);
             }
         }
         finally

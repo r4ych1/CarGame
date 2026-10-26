@@ -18,7 +18,9 @@ internal static class VehicleCatalog
             AerodynamicDragNewtonsPerSpeedSquared: 2.8f,
             MaximumSteeringAngleDegrees: 32.0f,
             HighSpeedSteeringScale: 0.45f,
-            YawDampingPerSecond: 0.15f),
+            YawDampingPerSecond: 0.15f,
+            RestLinearSpeedMetersPerSecond: 0.5f,
+            RestAngularSpeedRadiansPerSecond: 0.1f),
         new SuspensionSettings(
             FrontSpringRateNewtonsPerMeter: 30_000.0f,
             RearSpringRateNewtonsPerMeter: 25_000.0f,
@@ -43,6 +45,7 @@ internal static class VehicleCatalog
             IdleRevolutionsPerMinute: 850.0f,
             RedlineRevolutionsPerMinute: 6_500.0f,
             DrivelineEfficiency: 0.90f,
+            EngineBrakingTorqueNewtonMeters: 45.0f,
             TorqueCurve:
             [
                 new(850.0f, 125.0f),

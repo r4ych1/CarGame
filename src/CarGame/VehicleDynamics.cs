@@ -515,13 +515,32 @@ internal static class VehicleDynamics
     {
         float inputDirection = MathF.Sign(input.Throttle);
         float pedal = Math.Clamp(MathF.Abs(input.Throttle), 0.0f, 1.0f);
+        float brakePedal = Math.Clamp(input.Brake, 0.0f, 1.0f);
         float selectionSpeed = definition.Transmission.DirectionSelectionSpeedMetersPerSecond;
-        bool braking =
+        bool directionChangeBraking =
             (inputDirection > 0.0f && longitudinalSpeed < -selectionSpeed) ||
             (inputDirection < 0.0f && longitudinalSpeed > selectionSpeed);
-        if (braking || pedal <= 0.0f)
+        if (brakePedal > 0.0f || directionChangeBraking)
         {
-            return new DriveAndBrakeCommand(0.0f, braking ? pedal : 0.0f);
+            float brakeFraction = MathF.Max(brakePedal, directionChangeBraking ? pedal : 0.0f);
+            return new DriveAndBrakeCommand(0.0f, brakeFraction);
+        }
+
+        if (pedal <= 0.0f)
+        {
+            if (state.ShiftTimeRemainingSeconds > 0.0f || MathF.Abs(longitudinalSpeed) <= selectionSpeed)
+            {
+                return default;
+            }
+
+            float engineBrakingAxleTorque =
+                definition.Powertrain.EngineBrakingTorqueNewtonMeters *
+                GearRatio(definition.Transmission, state.CurrentGear) *
+                definition.Transmission.FinalDriveRatio *
+                definition.Powertrain.DrivelineEfficiency;
+            float opposingTorque = -MathF.CopySign(engineBrakingAxleTorque, longitudinalSpeed);
+            (float engineBrakingLeftTorque, _) = OpenDifferentialTorque(opposingTorque);
+            return new DriveAndBrakeCommand(engineBrakingLeftTorque, 0.0f);
         }
 
         float maximumSpeed = state.CurrentGear < 0

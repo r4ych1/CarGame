@@ -10,7 +10,6 @@ CarGame is an incrementally developed 2D top-down driving game proof of concept.
 - Read the relevant file under `specs/` before implementing a feature.
 - A feature spec owns its intended behavior, acceptance criteria, and explicit non-goals.
 - The live code and observed command output own implementation and verification status. Do not claim planned behavior is implemented.
-- `docs/asset-workflow.md` owns the PNG-generation and asset-intake process.
 
 ## Spec-driven workflow
 
@@ -53,16 +52,9 @@ Do not invent a long-term roadmap or implement anticipated features without an a
 - Visual or handling changes require a short manual verification checklist in their spec.
 - When tuning values, state the units and keep related parameters together.
 
-## Generated PNG assets
+## Visual assets
 
-- Follow `docs/asset-workflow.md`.
-- Store reusable prompts and generation notes under `assets/prompts/`.
-- Store only accepted, game-ready PNGs under `assets/game/`; transient variants belong under ignored `assets/work/`.
-- Use transparent backgrounds unless a full-frame image is explicitly required.
-- Top-down vehicle source art faces upward. Rotate it at runtime unless a spec requires directional frames.
-- Do not bake directional shadows into rotatable sprites. Keep shadows separate or render them in code.
-- Do not overwrite an accepted asset silently. Preserve it or use a versioned filename while alternatives are reviewed.
-- Record provenance in a prompt sidecar file with the same base name as the accepted asset.
+- Render project visuals in code. Do not add generated PNG artwork or an image-asset generation workflow.
 
 ## Commands
 

@@ -16,19 +16,32 @@ internal sealed class GameWorld : IDisposable
         worldDefinition.enableSleep = false;
         worldId = b2CreateWorld(worldDefinition);
         Vehicle = new Vehicle(worldId, VehicleCatalog.FirstCar);
+        Environment = new DrivingEnvironment(worldId);
     }
 
     public Vehicle Vehicle { get; }
+    public DrivingEnvironment Environment { get; }
 
     public void Step(VehicleInput input, float fixedTimeStep, int subSteps)
     {
         Vehicle.ApplyControls(input, fixedTimeStep);
+        Environment.Step(fixedTimeStep);
         b2World_Step(worldId, fixedTimeStep, subSteps);
     }
 
     public void ResetVehicle()
     {
         Vehicle.Reset();
+        Environment.Reset();
+    }
+
+    public void ExplodeVehicle()
+    {
+        if (!Vehicle.IsExploded)
+        {
+            Environment.Explode(Vehicle.PositionMeters);
+            Vehicle.Explode();
+        }
     }
 
     public void Dispose()
