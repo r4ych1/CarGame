@@ -134,7 +134,7 @@ public sealed class VehiclePhysicsTests
     }
 
     [Fact]
-    public void ExplosionCreatesTenFiniteMovingPiecesOnlyOnce()
+    public void ExplosionCreatesNineteenFiniteMovingPiecesOnlyOnce()
     {
         using GameWorld world = new();
 
@@ -143,7 +143,7 @@ public sealed class VehiclePhysicsTests
         Step(world, new VehicleInput(1.0f, 1.0f), 30);
 
         Assert.True(world.Vehicle.IsExploded);
-        Assert.Equal(10, world.Vehicle.ExplosionPieces.Count);
+        Assert.Equal(19, world.Vehicle.ExplosionPieces.Count);
         Assert.All(world.Vehicle.ExplosionPieces, piece =>
         {
             Assert.True(float.IsFinite(piece.PositionMeters.X));
@@ -151,6 +151,31 @@ public sealed class VehiclePhysicsTests
             Assert.True(float.IsFinite(piece.RotationRadians));
             Assert.True(piece.LinearVelocityMetersPerSecond.Length() > 0.1f);
         });
+        Assert.Equal(
+            world.Vehicle.Definition.Chassis.MassKilograms,
+            world.Vehicle.ExplosionPieces.Sum(piece => piece.MassKilograms),
+            0.01f);
+        Assert.Equal(6, world.Vehicle.ExplosionPieces.Count(piece =>
+            piece.Kind == ExplosionPieceKind.MiscellaneousDebris));
+        Assert.Equal(2, world.Vehicle.ExplosionPieces.Count(piece =>
+            piece.Kind == ExplosionPieceKind.Bumper));
+        Assert.Single(world.Vehicle.ExplosionPieces, piece =>
+            piece.Kind == ExplosionPieceKind.EngineBlock);
+    }
+
+    [Fact]
+    public void ExplosionLaunchesEngineBlockStronglyForward()
+    {
+        using GameWorld world = new();
+
+        world.ExplodeVehicle();
+
+        ExplosionPiece engine = Assert.Single(world.Vehicle.ExplosionPieces, piece =>
+            piece.Kind == ExplosionPieceKind.EngineBlock);
+        float forwardSpeed = Vector2.Dot(
+            engine.LinearVelocityMetersPerSecond,
+            VehicleMath.Forward(0.0f));
+        Assert.True(forwardSpeed >= 44.0f);
     }
 
     [Fact]

@@ -18,6 +18,7 @@ internal sealed class TrafficVehicle
     internal const float UncontrolledImpactSeconds = 0.55f;
     internal const float BlastEdgeSpeedMetersPerSecond = 6.0f;
     internal const float BlastCenterSpeedMetersPerSecond = 30.0f;
+    internal const float BlastDisabledGroundDecelerationMetersPerSecondSquared = 2.5f;
     private readonly B2BodyId bodyId;
     private readonly IReadOnlyList<TrafficRoutePoint> route;
     private int routeIndex;
@@ -25,6 +26,7 @@ internal sealed class TrafficVehicle
     private Vector2 velocityBeforePhysics;
     private float rotationBeforePhysics;
     private float recoveryTimerSeconds;
+    private bool rollsWhileDisabled;
 
     public TrafficVehicle(B2WorldId worldId, IReadOnlyList<TrafficRoutePoint> route, ColorRgb color)
     {
@@ -62,6 +64,7 @@ internal sealed class TrafficVehicle
         IsActive = true;
         IsWrecked = false;
         IsDisabled = false;
+        rollsWhileDisabled = false;
         respawnDelaySeconds = 0.0f;
         DamageEffectAgeSeconds = 0.0f;
         RecoveryState = TrafficRecoveryState.Driving;
@@ -92,8 +95,17 @@ internal sealed class TrafficVehicle
         if (IsDisabled)
         {
             DamageEffectAgeSeconds += timeStep;
-            b2Body_SetLinearVelocity(bodyId, default);
-            b2Body_SetAngularVelocity(bodyId, 0.0f);
+            if (rollsWhileDisabled)
+            {
+                ApplyGroundResistance(
+                    timeStep,
+                    BlastDisabledGroundDecelerationMetersPerSecondSquared);
+            }
+            else
+            {
+                b2Body_SetLinearVelocity(bodyId, default);
+                b2Body_SetAngularVelocity(bodyId, 0.0f);
+            }
             return;
         }
 
@@ -177,6 +189,7 @@ internal sealed class TrafficVehicle
         if (IsDisablingImpact(velocityBeforePhysics, velocityAfter, rotationBeforePhysics))
         {
             IsDisabled = true;
+            rollsWhileDisabled = false;
             DamageEffectAgeSeconds = 0.0f;
             RecoveryState = TrafficRecoveryState.Driving;
             b2Body_SetLinearVelocity(bodyId, default);
@@ -208,12 +221,22 @@ internal sealed class TrafficVehicle
         return velocityBefore.Length() >= 0.5f && (velocityAfter - velocityBefore).Length() >= 0.3f;
     }
 
-    public void ApplyBlast(Vector2 center, float radius)
+    public void ApplyBlast(Vector2 center, float radius, float deadlyRadius)
     {
         if (!IsActive || IsWrecked) return;
         Vector2 offset = PositionMeters - center;
         float distance = offset.Length();
         if (distance > radius) return;
+        DamageEffectAgeSeconds = 0.0f;
+        RecoveryState = TrafficRecoveryState.Driving;
+        if (distance > deadlyRadius)
+        {
+            IsWrecked = false;
+            IsDisabled = true;
+            rollsWhileDisabled = true;
+            return;
+        }
+
         Vector2 direction = distance > 0.01f ? offset / distance : Vector2.UnitX;
         float deltaSpeed = BlastPhysics.LaunchSpeed(
             distance,
@@ -223,18 +246,22 @@ internal sealed class TrafficVehicle
         float mass = b2Body_GetMass(bodyId);
         IsWrecked = true;
         IsDisabled = false;
-        DamageEffectAgeSeconds = 0.0f;
-        RecoveryState = TrafficRecoveryState.Driving;
+        rollsWhileDisabled = false;
         b2Body_ApplyLinearImpulseToCenter(bodyId, new B2Vec2(direction.X * mass * deltaSpeed, direction.Y * mass * deltaSpeed), true);
         b2Body_ApplyAngularImpulse(bodyId, mass * 0.7f, true);
     }
 
     private void ApplyWreckGroundResistance(float timeStep)
     {
+        ApplyGroundResistance(timeStep, 6.0f);
+    }
+
+    private void ApplyGroundResistance(float timeStep, float decelerationMetersPerSecondSquared)
+    {
         Vector2 velocity = LinearVelocityMetersPerSecond;
         float speed = velocity.Length();
         if (speed <= 0.0f) return;
-        float nextSpeed = MathF.Max(0.0f, speed - 6.0f * timeStep);
+        float nextSpeed = MathF.Max(0.0f, speed - decelerationMetersPerSecondSquared * timeStep);
         velocity *= nextSpeed / speed;
         b2Body_SetLinearVelocity(bodyId, new B2Vec2(velocity.X, velocity.Y));
     }
@@ -346,9 +373,9 @@ internal sealed class TrafficSystem
         return right * selectedSide * strongest;
     }
 
-    public void ApplyBlast(Vector2 center, float radius)
+    public void ApplyBlast(Vector2 center, float radius, float deadlyRadius)
     {
-        foreach (TrafficVehicle vehicle in vehicles) vehicle.ApplyBlast(center, radius);
+        foreach (TrafficVehicle vehicle in vehicles) vehicle.ApplyBlast(center, radius, deadlyRadius);
     }
 
     public void PostPhysicsStep()

@@ -622,47 +622,60 @@ internal sealed class GameRenderer
 
             }
 
-            for (int index = 0; index < effect.GroundFire.Count; index++)
+            for (int index = 0; index < effect.GroundFire.Count && effect.GroundFireOpacity > 0.0f; index++)
             {
                 BlastParticle particle = effect.GroundFire[index];
                 float particleAge = age - particle.DelaySeconds;
                 if (particleAge < 0.0f) continue;
-                float endFade = Math.Clamp((12.0f - particleAge) / 3.0f, 0.0f, 1.0f);
                 float flicker = 0.82f + 0.18f * MathF.Sin((particleAge * 9.0f) + (index * 1.7f));
                 Vector2 position = center + particle.OffsetMeters * scale;
                 float radius = particle.SizeMeters * scale * (0.38f + flicker * 0.32f);
-                Raylib.DrawCircleV(position, radius, Fade(new Color(170, 49, 18, 190), endFade * 0.48f));
+                Raylib.DrawCircleV(position, radius,
+                    Fade(new Color(170, 49, 18, 190), effect.GroundFireOpacity * 0.48f));
                 Raylib.DrawCircleV(position - new Vector2(0.0f, radius * 0.22f), radius * 0.68f,
-                    Fade(Color.Orange, endFade * flicker * 0.68f));
+                    Fade(Color.Orange, effect.GroundFireOpacity * flicker * 0.68f));
                 Raylib.DrawCircleV(position - new Vector2(0.0f, radius * 0.38f), radius * 0.30f,
-                    Fade(Color.Gold, endFade * flicker * 0.55f));
+                    Fade(Color.Gold, effect.GroundFireOpacity * flicker * 0.55f));
             }
 
             foreach (BlastParticle particle in effect.Smoke)
             {
-                float particleAge = age - particle.DelaySeconds;
-                if (particleAge < 0.0f) continue;
-                float fade = Math.Clamp(1.0f - (particleAge / 12.0f), 0.0f, 1.0f);
-                Vector2 position = center + particle.OffsetMeters * scale +
-                    particle.VelocityMetersPerSecond * MathF.Min(particleAge, 3.0f) * scale * 0.12f;
-                float radius = (particle.SizeMeters + MathF.Min(particleAge, 4.0f) * 0.35f) * scale;
-                Raylib.DrawCircleV(position, radius, Fade(new Color(57, 58, 54, 190), fade * 0.72f));
-                Raylib.DrawCircleV(position - new Vector2(radius * 0.18f), radius * 0.62f,
-                    Fade(new Color(89, 87, 79, 150), fade * 0.65f));
+                for (int ringIndex = 0; ringIndex < BlastVisualEffect.SmokeRingsPerTrail; ringIndex++)
+                {
+                    float progress = effect.SmokeRingProgress(particle, ringIndex);
+                    if (progress < 0.0f)
+                    {
+                        continue;
+                    }
+
+                    Vector2 position = center + particle.OffsetMeters * scale +
+                        particle.VelocityMetersPerSecond * progress * 3.0f * scale;
+                    float radius = (particle.SizeMeters * 0.55f +
+                        progress * (1.4f + particle.SizeMeters * 1.2f)) * scale;
+                    float opacity = (1.0f - progress) * 0.52f;
+                    Raylib.DrawCircleV(
+                        position,
+                        radius,
+                        Fade(new Color(57, 58, 54, 190), opacity));
+                    Raylib.DrawCircleV(
+                        position - new Vector2(radius * 0.12f, radius * 0.08f),
+                        radius * 0.58f,
+                        Fade(new Color(89, 87, 79, 150), opacity * 0.82f));
+                }
             }
 
-            float groundSmokeFade = Math.Clamp(1.0f - (age / 10.0f), 0.0f, 1.0f);
-            if (groundSmokeFade > 0.0f)
+            if (effect.GroundSmokeOpacity > 0.0f)
             {
-                float expansion = 0.32f + MathF.Min(age, 5.0f) * 0.12f;
-                foreach (BlastParticle particle in effect.GroundSmoke)
+                for (int layerIndex = BlastVisualEffect.GroundSmokeLayerCount - 1;
+                    layerIndex >= 0;
+                    layerIndex--)
                 {
-                    Vector2 drift = particle.VelocityMetersPerSecond * MathF.Min(age, 6.0f) * scale * 0.10f;
-                    Vector2 position = center + particle.OffsetMeters * scale * expansion + drift;
-                    float radius = (1.5f + particle.SizeMeters * 1.5f + MathF.Min(age, 5.0f) * 0.2f) * scale;
-                    Raylib.DrawCircleV(position, radius, Fade(new Color(48, 49, 48, 225), groundSmokeFade * 0.72f));
-                    Raylib.DrawCircleV(position - new Vector2(radius * 0.16f, radius * 0.12f), radius * 0.68f,
-                        Fade(new Color(83, 83, 79, 205), groundSmokeFade * 0.62f));
+                    float radius = effect.GroundSmokeLayerRadiusMeters(layerIndex) * scale;
+                    float layerOpacity = effect.GroundSmokeOpacity * (0.20f + (3 - layerIndex) * 0.08f);
+                    Color layerColor = layerIndex % 2 == 0
+                        ? new Color(48, 49, 48, 225)
+                        : new Color(69, 69, 65, 205);
+                    Raylib.DrawCircleV(center, radius, Fade(layerColor, layerOpacity));
                 }
             }
         }
@@ -922,14 +935,24 @@ internal sealed class GameRenderer
             float width = piece.SizeMeters.X * SimulationUnits.PixelsPerMeter;
             float length = piece.SizeMeters.Y * SimulationUnits.PixelsPerMeter;
             float rotationDegrees = piece.RotationRadians * (180.0f / MathF.PI);
-            Color color = piece.Kind == ExplosionPieceKind.Wheel
-                ? new Color(18, 19, 20, 255)
-                : new Color(190, 55, 46, 255);
+            Color color = piece.Kind switch
+            {
+                ExplosionPieceKind.Wheel => new Color(18, 19, 20, 255),
+                ExplosionPieceKind.EngineBlock => new Color(62, 67, 66, 255),
+                ExplosionPieceKind.Bumper => new Color(164, 169, 166, 255),
+                ExplosionPieceKind.MiscellaneousDebris => new Color(112, 73, 49, 255),
+                _ => new Color(190, 55, 46, 255),
+            };
             Raylib.DrawRectanglePro(
                 new Rectangle(piece.Position.X, piece.Position.Y, width, length),
                 new Vector2(width / 2.0f, length / 2.0f),
                 rotationDegrees,
                 color);
+            if (piece.Kind == ExplosionPieceKind.EngineBlock)
+            {
+                Raylib.DrawCircleV(piece.Position, MathF.Min(width, length) * 0.24f,
+                    new Color(29, 32, 32, 255));
+            }
         }
     }
 

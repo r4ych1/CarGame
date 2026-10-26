@@ -12,6 +12,8 @@ code-drawn people with lightweight movement and collision behavior.
 - Many people occupy town streets and sidewalks. Some walk short repeating
   paths while others stand, talk in pairs, or perform a small work-like idle
   motion.
+- People never spawn in the stream and cannot enter its visible water area;
+  they may cross only over the bridge.
 - Standing figures read clearly beside cars, with a drawn head-to-foot length
   of about 2 metres, roughly half a traffic car's length, and top-down shading
   that gives their upright pose more depth.
@@ -19,10 +21,11 @@ code-drawn people with lightweight movement and collision behavior.
   centered over its forward end. Arms and legs swing forward and backward along
   the facing direction with opposing walking phases.
 - People have lightweight physics and can be pushed by vehicles and props.
-- A direct car impact starts a brief fall animation, then leaves a flattened
-  body and a persistent blood pool.
-- After the fall reaction, the body stops blocking vehicles so cars can pass
-  over it.
+- A direct car impact transfers a small, capped amount of the vehicle's momentum
+  and spin to the person for 0.22 seconds before removing their collision
+  response. This gives the impact physical weight without letting the body stay
+  pinned to the bumper. The visual fall, flattened body, and persistent blood
+  pool remain.
 - People within the 16-metre deadly zone are killed and thrown outward.
 - People within 10 metres of ground zero burst into separate physics-driven
   body parts. When each part settles, a clearly visible blood pool spreads
@@ -41,22 +44,33 @@ code-drawn people with lightweight movement and collision behavior.
 - Pressing R restores the same people, paths, and living state.
 - Walkers move at roughly 1.5 to 2.3 m/s. Panicked people run at about 8 m/s.
 - A person facing a corpse within 8 metres or an approaching vehicle within
-  10 metres runs away briefly, whether idle or walking.
+  10 metres runs away briefly, whether idle or walking. Vehicle-triggered panic
+  chooses a lateral route out of the lane instead of running ahead of the car.
 - Living people within 44 metres of an explosion panic and run away. People
   inside the 32-metre impact radius also receive its physical force.
+- Panicked people look ahead for town walls and steer along a clear side route
+  instead of continuing to run directly into a blocking wall.
 
 ## Functional requirements
 
 - People and paths are handcrafted and deterministic.
 - Each person is a lightweight dynamic Box2D body; living walkers steer toward
   their authored paths while idle people hold their positions.
-- Vehicle approach and blast panic temporarily override authored movement with
-  a flee direction; characters return to their authored activity afterward.
+- Vehicle, explosion, and corpse panic temporarily override authored movement
+  with a flee direction; characters return to their authored activity afterward.
+- Panic steering tests the intended route against expanded town-wall bounds and
+  deterministically selects a clear angled route when the direct route is
+  blocked.
+- Stream-bank segments participate in panic route avoidance while leaving the
+  bridge opening clear. A post-physics position constraint returns any living
+  person displaced into the stream to the nearest bank without affecting travel
+  across the bridge.
 - Nearby corpses can trigger panic when in the character's forward view. Idle
   characters can enter the same flee state as walkers.
-- Vehicle impact and blast deaths disable walking behavior. Dead bodies settle
-  through physics, stop colliding after the fall reaction, and remain visible
-  until reset.
+- Vehicle impact and blast deaths disable walking behavior. Vehicle-impact
+  bodies receive a short momentum transfer and stop colliding after 0.22
+  seconds; blast bodies settle through physics and stop colliding after the
+  longer fall reaction. Both remain visible until reset.
 - Close-range blast victims split into independently simulated limb and torso
   bodies; each leaves a persistent blood pool after settling. Pools are not
   drawn while fragments are airborne, grow for about 0.8 seconds after landing,
@@ -80,6 +94,9 @@ code-drawn people with lightweight movement and collision behavior.
   follow the character's direction of travel.
 - People remain within their authored paths while alive and stay inside the
   playable area.
+- Every authored spawn and walking path lies outside the visible stream, unless
+  it is on the bridge. Living people fleeing or displaced by physics remain out
+  of the stream.
 - Explosions within 16 metres kill people; impacts from 16 to 32 metres throw
   them back with physics and leave them sprawled on the ground without blood
   for about 2.8 seconds before they recover. The prone drawing is about 60% of
@@ -92,26 +109,34 @@ code-drawn people with lightweight movement and collision behavior.
   fatal blast launch.
 - People facing a corpse within 8 metres or an approaching vehicle within
   10 metres flee, and people within 44 metres of an explosion panic. Fleeing
-  works for idle and walking people.
+  works for idle and walking people. Vehicle-triggered flee direction is lateral
+  to the vehicle's travel rather than ahead of it.
+- A panicked person's selected direction does not intersect a town wall within
+  the five-metre look-ahead distance when a clear angled route is available.
 - Walk speed is about 1.5 to 2.3 m/s and panic speed is about 8 m/s.
-- Car impacts trigger the fall animation and leave a flattened body with a
-  persistent blood pool.
-- A fallen body no longer blocks a car after the fall reaction completes.
+- Car impacts trigger a brief physical knock, then disable collision after 0.22
+  seconds and leave a flattened body with a persistent blood pool so the car can
+  finish driving over the person.
 - Reset deterministically restores every person, path, and animation state.
 - Build succeeds and formatting verification passes.
 
 ## Manual verification
 
 1. Inspect the rural road and confirm people stand or walk near the shoulder and
-   neighboring homes without covering the drivable lane.
+   neighboring homes without covering the drivable lane or standing in water.
 2. Inspect the town and confirm a dense population across the streets and
    blocks, with visible idle gestures and short walking routes.
 3. Watch for several seconds and confirm limbs, heads, and bodies animate while
    walkers progress along their routes.
-4. Hit a person with the car; confirm they fall, remain flattened, and leave a
-   blood pool.
-5. Approach a person from the direction they are facing; confirm they run away.
-6. Explode near a group and confirm nearby survivors run away at a clear sprint.
+4. Hit a person with the car; confirm they receive a brief physical knock before
+   the car passes over them without carrying them ahead of the bumper. Confirm
+   they fall, remain flattened, and leave a blood pool.
+5. Approach a person with the car and confirm they flee sideways out of its path
+   rather than running ahead of it.
+6. Explode near a group and confirm nearby survivors run away at a clear sprint;
+   people nearing town walls should turn and continue along a clear route.
+   Confirm anyone fleeing near the stream follows its bank or crosses the bridge
+   rather than entering the water.
 7. Confirm people within 10 metres break apart, but their limbs settle much
    closer to ground zero than intact fatal victims. Confirm a blood pool grows
    beneath every settled fragment and remains visible.
@@ -122,8 +147,9 @@ code-drawn people with lightweight movement and collision behavior.
 
 ## Non-goals
 
-- Dialogue, schedules, tasks, pathfinding beyond authored loops, or persistent
-  person state between resets.
+- Dialogue, schedules, tasks, general-purpose pathfinding beyond short-range
+  panic wall avoidance and authored loops, or persistent person state between
+  resets.
 
 ## Open decisions
 

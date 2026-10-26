@@ -36,10 +36,13 @@ checkpoint zigzag, and dirt bypass route.
   shoved sideways or fishtail. The driver then brakes progressively and stops
   for a total response of about 1.4 seconds, then resumes forward route-following
   and obstacle avoidance. Traffic never deliberately reverses during recovery.
-- A traffic car inside the player explosion radius leaves autopilot and becomes
-  uncontrolled dynamic wreckage. Blast speed change rises nonlinearly from
-  about 6 m/s near the edge to 30 m/s near ground zero so close cars travel
-  substantially farther than cars near the perimeter.
+- A traffic car within the 16-metre close blast zone leaves autopilot and
+  becomes uncontrolled dynamic wreckage. Its blast speed change rises
+  nonlinearly toward 30 m/s near ground zero.
+- A traffic car in the 16-to-32-metre damage band is disabled without receiving
+  a blast impulse. Its engine fire and smoke start immediately, and the car
+  retains its exact pre-blast linear and angular momentum before gradually
+  rolling to a stop under 2.5 m/s squared of ground resistance.
 - R restores four functioning cars at newly seeded route stages.
 
 ## Technical constraints
@@ -72,8 +75,10 @@ checkpoint zigzag, and dirt bypass route.
   or intentionally driving through checkpoint props.
 - Respawn delay is always between 5 and 15 seconds and restores the inbound
   spawn pose.
-- Blast-hit vehicles stop following the route and receive finite outward motion
-  with about 6 to 30 m/s of speed change depending nonlinearly on blast distance.
+- Blast-hit vehicles stop following the route. Cars within 16 metres receive a
+  finite outward blast impulse, while cars in the 16-to-32-metre damage band
+  receive no impulse, preserve their pre-blast momentum, display engine fire and
+  smoke, and progressively roll to a stop.
 - Lateral collision velocity is not erased on the next fixed step. Route
   recovery is progressive rather than an immediate snap.
 - Obstacle avoidance examines a 14-metre forward corridor and chooses a passing
@@ -103,9 +108,9 @@ checkpoint zigzag, and dirt bypass route.
    remains disabled at the scene.
 7. Watch a following car slow, steer around the disabled car, and return to its
    route rather than joining a permanent traffic jam.
-8. Explode beside traffic and confirm affected cars are thrown outward while
-   retaining animated engine fire and smoke; cars close to ground zero should
-   travel substantially farther than cars near the blast perimeter.
+8. Explode beside traffic and confirm cars within 16 metres are thrown outward.
+   Confirm cars in the 16-to-32-metre damage band ignite and lose engine control
+   but continue coasting in their original direction until rolling to a stop.
 9. Cause both slow and faster non-disabling bumps and confirm the driver reacts,
    brakes to a stop, then attempts to continue forward without backing up.
 

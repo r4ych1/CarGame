@@ -55,6 +55,28 @@ public sealed class DrivingEnvironmentTests
     }
 
     [Fact]
+    public void PeopleSpawnOutsideStreamAndFleeAlongItsBank()
+    {
+        using GameWorld world = new();
+        Assert.DoesNotContain(world.Environment.Characters, character =>
+            DrivingEnvironment.IsPedestrianInStream(character.PositionMeters));
+        Assert.All(world.Environment.Characters, character =>
+            Assert.DoesNotContain(character.AuthoredPath, DrivingEnvironment.IsPedestrianInStream));
+
+        AmbientCharacter watersideCharacter = Assert.Single(world.Environment.Characters, character =>
+            character.PositionMeters == new Vector2(-26.0f, -104.0f));
+        watersideCharacter.ReactToExplosion(new Vector2(-26.0f, -90.0f), 44.0f);
+
+        for (int index = 0; index < 360; index++)
+        {
+            world.Step(default, 1.0f / 60.0f, 4);
+            Assert.False(DrivingEnvironment.IsPedestrianInStream(watersideCharacter.PositionMeters));
+        }
+
+        Assert.True(watersideCharacter.IsPanicking);
+    }
+
+    [Fact]
     public void RoadIsStraightAndCenteredAcrossBridge()
     {
         float[] crossingSamples = [-136.0f, -132.0f, -120.0f, -108.0f, -104.0f];
@@ -209,7 +231,7 @@ public sealed class DrivingEnvironmentTests
     }
 
     [Fact]
-    public void BlastCreatesDeterministicLayeredVisualEffectThatExpires()
+    public void BlastCreatesVariedLayeredVisualEffectThatPersistsUntilReset()
     {
         using GameWorld world = new();
         world.ExplodeVehicle();
@@ -220,6 +242,15 @@ public sealed class DrivingEnvironmentTests
         Assert.Equal(22, effect.GroundFire.Count);
         Assert.Equal(36, effect.Debris.Count);
         Assert.Equal(Vector2.Zero, effect.CenterMeters);
+        Assert.True(effect.GroundFire.Max(particle => particle.SizeMeters) >=
+            effect.GroundFire.Min(particle => particle.SizeMeters) * 4.0f);
+        Assert.True(effect.Smoke.Max(particle => particle.SizeMeters) >=
+            effect.Smoke.Min(particle => particle.SizeMeters) * 4.0f);
+        float[] initialGroundSmokeRadii = Enumerable.Range(0, BlastVisualEffect.GroundSmokeLayerCount)
+            .Select(effect.GroundSmokeLayerRadiusMeters)
+            .ToArray();
+        Assert.Equal(4, initialGroundSmokeRadii.Length);
+        Assert.Equal(initialGroundSmokeRadii.Order(), initialGroundSmokeRadii);
 
         for (int index = 0; index < 240; index++)
             world.Step(default, 1.0f / 60.0f, 4);
@@ -227,9 +258,22 @@ public sealed class DrivingEnvironmentTests
         BlastVisualEffect lingeringEffect = Assert.Single(world.Environment.BlastEffects);
         Assert.Equal(22, lingeringEffect.GroundFire.Count);
         Assert.Contains(lingeringEffect.GroundFire, particle => particle.OffsetMeters.Length() > 20.0f);
+        Assert.InRange(lingeringEffect.GroundFireOpacity, 0.65f, 0.68f);
+        Assert.InRange(lingeringEffect.GroundSmokeOpacity, 0.65f, 0.68f);
+        Assert.True(lingeringEffect.GroundSmokeLayerRadiusMeters(0) > initialGroundSmokeRadii[0]);
+        float firstRingProgress = lingeringEffect.SmokeRingProgress(lingeringEffect.Smoke[0], 0);
+        float laterRingProgress = lingeringEffect.SmokeRingProgress(lingeringEffect.Smoke[0], 1);
+        Assert.True(firstRingProgress > laterRingProgress);
 
-        for (int index = 0; index < 481; index++)
+        for (int index = 0; index < 3_600; index++)
             world.Step(default, 1.0f / 60.0f, 4);
+
+        Assert.Same(lingeringEffect, Assert.Single(world.Environment.BlastEffects));
+        Assert.Equal(0.0f, lingeringEffect.GroundFireOpacity);
+        Assert.Equal(0.0f, lingeringEffect.GroundSmokeOpacity);
+        Assert.InRange(lingeringEffect.SmokeRingProgress(lingeringEffect.Smoke[0], 0), 0.0f, 1.0f);
+
+        world.ResetVehicle();
 
         Assert.Empty(world.Environment.BlastEffects);
     }
@@ -274,5 +318,57 @@ public sealed class DrivingEnvironmentTests
 
         Assert.True(fartherCharacter.IsDead);
         Assert.False(fartherCharacter.HasExplodedIntoLimbs);
+    }
+
+    [Fact]
+    public void PanicSteeringSelectsClearAngledRouteAroundWall()
+    {
+        WallSegment[] walls = [new(new Vector2(4.0f, 0.0f), new Vector2(2.0f, 12.0f))];
+
+        Vector2 direction = AmbientCharacter.ChoosePanicDirection(
+            Vector2.Zero,
+            Vector2.UnitX,
+            walls);
+
+        Assert.True(Vector2.Dot(direction, Vector2.UnitX) > -0.0001f);
+        Assert.True(MathF.Abs(direction.Y) > 0.9f);
+        Assert.Equal(
+            Vector2.UnitX,
+            AmbientCharacter.ChoosePanicDirection(Vector2.Zero, Vector2.UnitX, []));
+    }
+
+    [Fact]
+    public void VehicleImpactBrieflyTransfersMomentumBeforeDisablingCollision()
+    {
+        using GameWorld world = new();
+        AmbientCharacter character = world.Environment.Characters[0];
+        Vector2 impactPosition = character.PositionMeters;
+
+        character.DieFromVehicleImpact(new Vector2(0.0f, -20.0f));
+
+        Assert.True(character.IsDead);
+        Assert.False(character.IsCollisionDisabled);
+        Assert.InRange(character.LinearVelocityMetersPerSecond.Length(), 6.9f, 7.1f);
+
+        character.Step(0.23f, world.Environment.TownWalls);
+
+        Assert.True(character.IsCollisionDisabled);
+        Assert.Equal(impactPosition, character.PositionMeters);
+        Assert.True(character.DeathAgeSeconds > 0.0f);
+    }
+
+    [Fact]
+    public void ApproachingVehicleTriggersLateralFleeDirection()
+    {
+        using GameWorld world = new();
+        AmbientCharacter character = world.Environment.Characters[0];
+        Vector2 facing = new(MathF.Cos(character.FacingRadians), MathF.Sin(character.FacingRadians));
+        Vector2 vehiclePosition = character.PositionMeters + facing * 5.0f;
+        Vector2 vehicleVelocity = -facing * 12.0f;
+
+        character.TryFleeFromVehicle(vehiclePosition, vehicleVelocity, 10.0f);
+
+        Assert.True(character.IsPanicking);
+        Assert.InRange(MathF.Abs(Vector2.Dot(character.PanicDirection, vehicleVelocity)), 0.0f, 0.0001f);
     }
 }

@@ -122,13 +122,19 @@ internal readonly record struct BlastParticle(Vector2 OffsetMeters, Vector2 Velo
 
 internal sealed class BlastVisualEffect
 {
+    public const int SmokeRingsPerTrail = 4;
+    public const float SmokeRingLifetimeSeconds = 7.0f;
+    public const float SmokeRingEmissionIntervalSeconds = 1.4f;
+    public const float GroundFireFadeDurationSeconds = 12.0f;
+    public const float GroundSmokeFadeDurationSeconds = 12.0f;
+    public const int GroundSmokeLayerCount = 4;
+
     public BlastVisualEffect(Vector2 centerMeters)
     {
         CenterMeters = centerMeters;
-        Smoke = CreateParticles(28, 31.0f, 2.4f, 0.7f);
+        Smoke = CreateParticles(28, 31.0f, 2.4f, 0.7f, 0.35f, 0.23f, 7);
         Fire = CreateParticles(18, 10.0f, 8.0f, 0.0f);
-        GroundFire = CreateParticles(22, 30.0f, 0.0f, 1.0f);
-        GroundSmoke = CreateParticles(25, 5.0f, 0.8f, 0.0f);
+        GroundFire = CreateParticles(22, 30.0f, 0.0f, 1.0f, 0.30f, 0.22f, 6);
         Debris = CreateParticles(36, 5.0f, 22.0f, 0.0f);
     }
 
@@ -137,12 +143,41 @@ internal sealed class BlastVisualEffect
     public IReadOnlyList<BlastParticle> Smoke { get; }
     public IReadOnlyList<BlastParticle> Fire { get; }
     public IReadOnlyList<BlastParticle> GroundFire { get; }
-    public IReadOnlyList<BlastParticle> GroundSmoke { get; }
     public IReadOnlyList<BlastParticle> Debris { get; }
-    public bool IsFinished => AgeSeconds >= 12.0f;
+    public float GroundFireOpacity =>
+        Math.Clamp(1.0f - (AgeSeconds / GroundFireFadeDurationSeconds), 0.0f, 1.0f);
+    public float GroundSmokeOpacity =>
+        Math.Clamp(1.0f - (AgeSeconds / GroundSmokeFadeDurationSeconds), 0.0f, 1.0f);
+
     public void Step(float timeStep) => AgeSeconds += timeStep;
 
-    private static BlastParticle[] CreateParticles(int count, float radius, float speed, float maximumDelay)
+    public float GroundSmokeLayerRadiusMeters(int layerIndex)
+    {
+        float expansion = 0.42f + 0.58f * Math.Clamp(AgeSeconds / 5.0f, 0.0f, 1.0f);
+        float resonance = 1.0f + 0.045f * MathF.Sin(AgeSeconds * 1.7f - layerIndex * 0.85f);
+        return (4.0f + layerIndex * 2.4f) * expansion * resonance;
+    }
+
+    public float SmokeRingProgress(BlastParticle particle, int ringIndex)
+    {
+        float ringAge = AgeSeconds - particle.DelaySeconds -
+            ringIndex * SmokeRingEmissionIntervalSeconds;
+        if (ringAge < 0.0f)
+        {
+            return -1.0f;
+        }
+
+        return ringAge % SmokeRingLifetimeSeconds / SmokeRingLifetimeSeconds;
+    }
+
+    private static BlastParticle[] CreateParticles(
+        int count,
+        float radius,
+        float speed,
+        float maximumDelay,
+        float minimumSizeMeters = 0.25f,
+        float sizeStepMeters = 0.13f,
+        int sizeVariants = 5)
     {
         BlastParticle[] particles = new BlastParticle[count];
         const float goldenAngle = 2.3999632f;
@@ -154,7 +189,7 @@ internal sealed class BlastVisualEffect
             particles[index] = new(
                 direction * radius * MathF.Sqrt(ratio),
                 direction * speed * (0.55f + 0.45f * ratio),
-                0.25f + (index % 5) * 0.13f,
+                minimumSizeMeters + (index % sizeVariants) * sizeStepMeters,
                 maximumDelay * ((index * 7) % count) / count);
         }
         return particles;
@@ -273,6 +308,7 @@ internal sealed class DrivingEnvironment
     private readonly List<BlastVisualEffect> blastEffects = [];
     private readonly List<PhysicsProp> props = [];
     private readonly List<WallSegment> townWalls = [];
+    private readonly List<WallSegment> pedestrianPanicBarriers = [];
     private readonly List<AmbientCharacter> characters = [];
 
     public DrivingEnvironment(B2WorldId worldId)
@@ -280,6 +316,7 @@ internal sealed class DrivingEnvironment
         this.worldId = worldId;
         CreateBoundaries();
         CreateTownWalls();
+        CreatePedestrianPanicBarriers();
         Build();
         BuildProps();
         BuildCharacters();
@@ -301,7 +338,7 @@ internal sealed class DrivingEnvironment
     {
         WaterFlowAgeSeconds += timeStep;
         UpdateCharacterFear();
-        foreach (AmbientCharacter character in characters) character.Step(timeStep);
+        foreach (AmbientCharacter character in characters) character.Step(timeStep, pedestrianPanicBarriers);
         foreach (WorldDebris item in debris) item.Step(timeStep);
         foreach (BlastVisualEffect effect in blastEffects) effect.Step(timeStep);
         foreach (PhysicsProp prop in props) prop.Step(timeStep);
@@ -317,13 +354,18 @@ internal sealed class DrivingEnvironment
         if (playerObstacleMeters.HasValue)
             trafficObstacles.Add(new(playerObstacleMeters.Value, 1.5f));
         Traffic.Step(timeStep, trafficObstacles);
-        blastEffects.RemoveAll(effect => effect.IsFinished);
     }
 
     public void PostPhysicsStep(Vehicle playerVehicle)
     {
         foreach (AmbientCharacter character in characters)
         {
+            character.KeepOutOfStream(
+                StreamCenterYMeters,
+                StreamWidthMeters,
+                BridgeCenterXMeters,
+                BridgeWidthMeters);
+
             if (!playerVehicle.IsExploded && !playerVehicle.IsSunk)
             {
                 character.TryFleeFromVehicle(
@@ -345,7 +387,7 @@ internal sealed class DrivingEnvironment
                         playerVehicle.Definition.Chassis.WidthMeters,
                         playerVehicle.Definition.Chassis.LengthMeters)))
             {
-                character.Die();
+                character.DieFromVehicleImpact(playerVehicle.VelocityMetersPerSecond);
                 continue;
             }
 
@@ -359,13 +401,14 @@ internal sealed class DrivingEnvironment
                         10.0f);
                 }
 
-                if (trafficVehicle.IsActive && trafficVehicle.LinearVelocityMetersPerSecond.Length() > 2.0f &&
+                if (trafficVehicle.IsActive &&
+                    trafficVehicle.LinearVelocityMetersPerSecond.Length() > 2.0f &&
                     character.IsOverlappedByVehicle(
                         trafficVehicle.PositionMeters,
                         trafficVehicle.RotationRadians,
                         trafficVehicle.SizeMeters))
                 {
-                    character.Die();
+                    character.DieFromVehicleImpact(trafficVehicle.LinearVelocityMetersPerSecond);
                     break;
                 }
             }
@@ -385,7 +428,7 @@ internal sealed class DrivingEnvironment
         }
 
         foreach (PhysicsProp prop in props) prop.ApplyBlast(center, BlastRadiusMeters);
-        Traffic.ApplyBlast(center, BlastRadiusMeters);
+        Traffic.ApplyBlast(center, BlastRadiusMeters, DeadlyBlastRadiusMeters);
         foreach (SceneryObject item in scenery)
         {
             if (item.IsDestroyed) continue;
@@ -551,6 +594,15 @@ internal sealed class DrivingEnvironment
         return insideDeepWater && !onBridge;
     }
 
+    public static bool IsPedestrianInStream(Vector2 positionMeters)
+    {
+        bool insideVisibleWater = MathF.Abs(positionMeters.Y - StreamCenterYMeters) <
+            StreamWidthMeters * 0.5f;
+        bool onBridge = MathF.Abs(positionMeters.X - BridgeCenterXMeters) <=
+            BridgeWidthMeters * 0.5f;
+        return insideVisibleWater && !onBridge;
+    }
+
     public static float RoadCenterXMeters(float yMeters)
     {
         float sampleIndex = (60.0f - yMeters) / 10.0f;
@@ -637,6 +689,29 @@ internal sealed class DrivingEnvironment
         AddTownWall(
             new((entranceRight + TownMaximumMeters.X) * 0.5f, TownMaximumMeters.Y),
             new(TownMaximumMeters.X - entranceRight, thickness));
+    }
+
+    private void CreatePedestrianPanicBarriers()
+    {
+        pedestrianPanicBarriers.AddRange(townWalls);
+        const float bankBarrierThicknessMeters = 1.0f;
+        float bridgeLeft = BridgeCenterXMeters - BridgeWidthMeters * 0.5f;
+        float bridgeRight = BridgeCenterXMeters + BridgeWidthMeters * 0.5f;
+        float leftWidth = bridgeLeft - BoundaryMinimumMeters.X;
+        float rightWidth = BoundaryMaximumMeters.X - bridgeRight;
+        float leftCenter = BoundaryMinimumMeters.X + leftWidth * 0.5f;
+        float rightCenter = bridgeRight + rightWidth * 0.5f;
+        float northBank = StreamCenterYMeters - StreamWidthMeters * 0.5f;
+        float southBank = StreamCenterYMeters + StreamWidthMeters * 0.5f;
+        foreach (float bankY in new[] { northBank, southBank })
+        {
+            pedestrianPanicBarriers.Add(new(
+                new Vector2(leftCenter, bankY),
+                new Vector2(leftWidth, bankBarrierThicknessMeters)));
+            pedestrianPanicBarriers.Add(new(
+                new Vector2(rightCenter, bankY),
+                new Vector2(rightWidth, bankBarrierThicknessMeters)));
+        }
     }
 
     private void AddTownWall(Vector2 position, Vector2 size)
@@ -771,7 +846,7 @@ internal sealed class DrivingEnvironment
         }
 
         AddResident(new(-26.0f, -99.0f), 0.0f, CharacterActivity.Standing);
-        AddResident(new(-26.0f, -111.0f), MathF.PI * 0.5f, CharacterActivity.Working);
+        AddResident(new(-26.0f, -104.0f), MathF.PI * 0.5f, CharacterActivity.Working);
         AddResident(new(-34.0f, -68.0f), MathF.PI, CharacterActivity.Standing);
         AddResident(new(-34.0f, -76.0f), 0.0f, CharacterActivity.Talking);
         AddResident(new(-36.0f, -160.0f), 0.0f, CharacterActivity.Standing);

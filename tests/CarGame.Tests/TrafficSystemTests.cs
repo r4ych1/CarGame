@@ -210,6 +210,39 @@ public sealed class TrafficSystemTests
     }
 
     [Fact]
+    public void DamageZoneBlastDisablesTrafficAndPreservesMomentumUntilItRollsToStop()
+    {
+        using GameWorld world = new();
+        TrafficVehicle vehicle = world.Environment.Traffic.Vehicles[0];
+        Vector2 velocityBeforeBlast = vehicle.LinearVelocityMetersPerSecond;
+        Vector2 blastCenter = vehicle.PositionMeters - new Vector2(24.0f, 0.0f);
+
+        vehicle.ApplyBlast(
+            blastCenter,
+            DrivingEnvironment.BlastRadiusMeters,
+            DrivingEnvironment.DeadlyBlastRadiusMeters);
+
+        Assert.True(vehicle.IsDisabled);
+        Assert.False(vehicle.IsWrecked);
+        Assert.Equal(velocityBeforeBlast, vehicle.LinearVelocityMetersPerSecond);
+        Assert.True(vehicle.LinearVelocityMetersPerSecond.Length() > 0.0f);
+
+        vehicle.Step(1.0f, () => 5.0f, Vector2.Zero);
+
+        Assert.Equal(
+            velocityBeforeBlast.Length() -
+                TrafficVehicle.BlastDisabledGroundDecelerationMetersPerSecondSquared,
+            vehicle.LinearVelocityMetersPerSecond.Length(),
+            0.001f);
+
+        for (int index = 0; index < 300; index++)
+            vehicle.Step(1.0f / 60.0f, () => 5.0f, Vector2.Zero);
+
+        Assert.Equal(Vector2.Zero, vehicle.LinearVelocityMetersPerSecond);
+        Assert.True(vehicle.DamageEffectAgeSeconds > 0.0f);
+    }
+
+    [Fact]
     public void TrafficBlastSpeedIsStrongestNearGroundZero()
     {
         const float radiusMeters = 32.0f;

@@ -12,6 +12,9 @@ internal enum ExplosionPieceKind
 {
     BodyPanel,
     Wheel,
+    EngineBlock,
+    Bumper,
+    MiscellaneousDebris,
 }
 
 internal sealed class ExplosionPiece
@@ -32,6 +35,7 @@ internal sealed class ExplosionPiece
     {
         Kind = kind;
         SizeMeters = sizeMeters;
+        MassKilograms = massKilograms;
 
         B2BodyDef bodyDefinition = b2DefaultBodyDef();
         bodyDefinition.type = B2BodyType.b2_dynamicBody;
@@ -64,6 +68,8 @@ internal sealed class ExplosionPiece
     public ExplosionPieceKind Kind { get; }
 
     public Vector2 SizeMeters { get; }
+
+    public float MassKilograms { get; }
 
     public Vector2 Position => SimulationUnits.ToPixels(b2Body_GetPosition(bodyId));
 

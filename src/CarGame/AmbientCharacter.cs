@@ -136,9 +136,12 @@ internal sealed class CharacterLimb
 internal sealed class AmbientCharacter
 {
     private const float DeathReactionDurationSeconds = 0.65f;
+    private const float VehicleImpactReactionDurationSeconds = 0.22f;
     private const float PanicRunningSpeedMetersPerSecond = 8.0f;
     private const float CharacterBodyHalfWidthMeters = 0.36f;
     private const float CharacterBodyHalfLengthMeters = 0.44f;
+    private const float PanicLookAheadMeters = 5.0f;
+    private const float PanicWallClearanceMeters = 0.65f;
     internal const float LimbBurstRadiusMeters = 10.0f;
     private const float MinimumLimbLaunchSpeedMetersPerSecond = 5.0f;
     private const float MaximumLimbLaunchSpeedMetersPerSecond = 14.0f;
@@ -154,6 +157,7 @@ internal sealed class AmbientCharacter
     private int currentSegmentIndex;
     private float distanceIntoCurrentSegmentMeters;
     private bool bodyDisabled;
+    private float collisionDisableDelaySeconds = DeathReactionDurationSeconds;
     private Vector2 panicDirection;
     private float panicTimerSeconds;
     private float knockedDownTimerSeconds;
@@ -233,13 +237,16 @@ internal sealed class AmbientCharacter
     public bool IsPanicking => panicTimerSeconds > 0.0f;
     public bool IsKnockedDown => knockedDownTimerSeconds > 0.0f;
     public bool HasExplodedIntoLimbs { get; private set; }
+    internal bool IsCollisionDisabled => bodyDisabled;
+    internal Vector2 PanicDirection => panicDirection;
+    internal IReadOnlyList<Vector2> AuthoredPath => path;
     public IReadOnlyList<CharacterLimb> LimbFragments => limbFragments;
     public ColorRgb ClothingColor { get; }
     public ColorRgb SkinColor { get; }
     public float AnimationOffset => animationOffset;
     public float MassKilograms => b2Body_GetMass(bodyId);
 
-    public void Step(float timeStep)
+    public void Step(float timeStep, IReadOnlyList<WallSegment>? panicObstacles = null)
     {
         AnimationAgeSeconds += timeStep;
         foreach (CharacterLimb limb in limbFragments)
@@ -253,7 +260,7 @@ internal sealed class AmbientCharacter
             if (!bodyDisabled)
             {
                 ApplyCorpseResistance(timeStep);
-                if (DeathAgeSeconds >= DeathReactionDurationSeconds)
+                if (DeathAgeSeconds >= collisionDisableDelaySeconds)
                 {
                     b2Body_SetLinearVelocity(bodyId, default);
                     b2Body_SetAngularVelocity(bodyId, 0.0f);
@@ -301,9 +308,15 @@ internal sealed class AmbientCharacter
         if (panicTimerSeconds > 0.0f)
         {
             panicTimerSeconds = MathF.Max(0.0f, panicTimerSeconds - timeStep);
+            Vector2 steeringDirection = ChoosePanicDirection(
+                PositionMeters,
+                panicDirection,
+                panicObstacles ?? []);
             Vector2 panicVelocity = LinearVelocityMetersPerSecond;
-            float runningSpeed = MathF.Max(PanicRunningSpeedMetersPerSecond, Vector2.Dot(panicVelocity, panicDirection));
-            Vector2 panicTargetVelocity = panicDirection * runningSpeed;
+            float runningSpeed = MathF.Max(
+                PanicRunningSpeedMetersPerSecond,
+                Vector2.Dot(panicVelocity, steeringDirection));
+            Vector2 panicTargetVelocity = steeringDirection * runningSpeed;
             Vector2 panicAcceleration = (panicTargetVelocity - panicVelocity) * 2.4f;
             const float maximumPanicAcceleration = 14.0f;
             if (panicAcceleration.LengthSquared() > maximumPanicAcceleration * maximumPanicAcceleration)
@@ -312,7 +325,7 @@ internal sealed class AmbientCharacter
             }
             Vector2 panicForce = panicAcceleration * MassKilograms;
             b2Body_ApplyForceToCenter(bodyId, new B2Vec2(panicForce.X, panicForce.Y), true);
-            FacingRadians = MathF.Atan2(panicDirection.Y, panicDirection.X);
+            FacingRadians = MathF.Atan2(steeringDirection.Y, steeringDirection.X);
             return;
         }
 
@@ -380,8 +393,68 @@ internal sealed class AmbientCharacter
         knockedDownTimerSeconds = 0.0f;
         IsDead = true;
         DeathAgeSeconds = 0.0f;
+        collisionDisableDelaySeconds = DeathReactionDurationSeconds;
         B2Vec2 position = b2Body_GetPosition(bodyId);
         b2Body_SetTransform(bodyId, position, b2MakeRot(FacingRadians));
+    }
+
+    public void DieFromVehicleImpact(Vector2 vehicleVelocityMetersPerSecond)
+    {
+        Die();
+        collisionDisableDelaySeconds = VehicleImpactReactionDurationSeconds;
+        float vehicleSpeed = vehicleVelocityMetersPerSecond.Length();
+        if (vehicleSpeed > 0.01f)
+        {
+            Vector2 impactDirection = vehicleVelocityMetersPerSecond / vehicleSpeed;
+            float transferredSpeed = Math.Clamp(vehicleSpeed * 0.35f, 2.0f, 8.0f);
+            float mass = MassKilograms;
+            b2Body_ApplyLinearImpulseToCenter(
+                bodyId,
+                new B2Vec2(
+                    impactDirection.X * mass * transferredSpeed,
+                    impactDirection.Y * mass * transferredSpeed),
+                true);
+            float spinDirection = animationOffset % 2.0f < 1.0f ? 1.0f : -1.0f;
+            b2Body_ApplyAngularImpulse(bodyId, mass * 1.8f * spinDirection, true);
+        }
+    }
+
+    public void KeepOutOfStream(
+        float streamCenterYMeters,
+        float streamWidthMeters,
+        float bridgeCenterXMeters,
+        float bridgeWidthMeters)
+    {
+        if (IsDead)
+        {
+            return;
+        }
+
+        Vector2 position = PositionMeters;
+        float bridgeHalfWidth = bridgeWidthMeters * 0.5f - CharacterBodyHalfWidthMeters;
+        if (MathF.Abs(position.X - bridgeCenterXMeters) <= bridgeHalfWidth)
+        {
+            return;
+        }
+
+        float protectedHalfWidth = streamWidthMeters * 0.5f + CharacterBodyHalfLengthMeters;
+        float streamOffset = position.Y - streamCenterYMeters;
+        if (MathF.Abs(streamOffset) >= protectedHalfWidth)
+        {
+            return;
+        }
+
+        float bankSide = streamOffset < 0.0f ? -1.0f : 1.0f;
+        Vector2 safePosition = new(
+            position.X,
+            streamCenterYMeters + bankSide * protectedHalfWidth);
+        b2Body_SetTransform(bodyId, new B2Vec2(safePosition.X, safePosition.Y), b2Body_GetRotation(bodyId));
+        B2Vec2 velocity = b2Body_GetLinearVelocity(bodyId);
+        bool movingIntoStream = velocity.Y * bankSide < 0.0f;
+        if (movingIntoStream)
+        {
+            b2Body_SetLinearVelocity(bodyId, new B2Vec2(velocity.X, 0.0f));
+        }
     }
 
     public bool ApplyBlast(Vector2 centerMeters, float radiusMeters, float deadlyRadiusMeters)
@@ -443,7 +516,10 @@ internal sealed class AmbientCharacter
         b2Body_SetTransform(bodyId, position, b2MakeRot(FacingRadians));
     }
 
-    public void TryFleeFromVehicle(Vector2 vehiclePosition, Vector2 vehicleVelocity, float triggerDistanceMeters)
+    public void TryFleeFromVehicle(
+        Vector2 vehiclePosition,
+        Vector2 vehicleVelocity,
+        float triggerDistanceMeters)
     {
         if (IsDead || panicTimerSeconds > 0.0f || vehicleVelocity.LengthSquared() < 4.0f)
         {
@@ -460,11 +536,16 @@ internal sealed class AmbientCharacter
         Vector2 towardVehicle = toVehicle / distance;
         Vector2 facing = new(MathF.Cos(FacingRadians), MathF.Sin(FacingRadians));
         Vector2 vehicleForward = Vector2.Normalize(vehicleVelocity);
-        if (Vector2.Dot(facing, towardVehicle) > 0.45f &&
-            Vector2.Dot(vehicleForward, -towardVehicle) > 0.45f)
+        if (Vector2.Dot(facing, towardVehicle) <= 0.45f ||
+            Vector2.Dot(vehicleForward, -towardVehicle) <= 0.45f)
         {
-            BeginPanic(-towardVehicle, 3.5f);
+            return;
         }
+
+        Vector2 vehicleRight = new(-vehicleForward.Y, vehicleForward.X);
+        Vector2 fromVehicle = PositionMeters - vehiclePosition;
+        float side = Vector2.Dot(fromVehicle, vehicleRight) >= 0.0f ? 1.0f : -1.0f;
+        BeginPanic(vehicleRight * side, 3.5f);
     }
 
     public void ReactToExplosion(Vector2 centerMeters, float panicRadiusMeters)
@@ -531,6 +612,114 @@ internal sealed class AmbientCharacter
 
         panicDirection = Vector2.Normalize(direction);
         panicTimerSeconds = MathF.Max(panicTimerSeconds, durationSeconds);
+    }
+
+    internal static Vector2 ChoosePanicDirection(
+        Vector2 positionMeters,
+        Vector2 desiredDirection,
+        IReadOnlyList<WallSegment> obstacles)
+    {
+        if (desiredDirection.LengthSquared() < 0.0001f)
+        {
+            return Vector2.Zero;
+        }
+
+        Vector2 desired = Vector2.Normalize(desiredDirection);
+        float[] candidateAngles =
+        [
+            0.0f,
+            MathF.PI / 4.0f,
+            -MathF.PI / 4.0f,
+            MathF.PI / 3.0f,
+            -MathF.PI / 3.0f,
+            MathF.PI / 2.0f,
+            -MathF.PI / 2.0f,
+        ];
+        foreach (float angle in candidateAngles)
+        {
+            float cosine = MathF.Cos(angle);
+            float sine = MathF.Sin(angle);
+            Vector2 candidate = new(
+                desired.X * cosine - desired.Y * sine,
+                desired.X * sine + desired.Y * cosine);
+            if (!IsPanicRouteBlocked(positionMeters, candidate, obstacles))
+            {
+                return candidate;
+            }
+        }
+
+        return -desired;
+    }
+
+    private static bool IsPanicRouteBlocked(
+        Vector2 start,
+        Vector2 direction,
+        IReadOnlyList<WallSegment> obstacles)
+    {
+        foreach (WallSegment obstacle in obstacles)
+        {
+            Vector2 halfSize = obstacle.SizeMeters * 0.5f +
+                new Vector2(PanicWallClearanceMeters);
+            Vector2 minimum = obstacle.PositionMeters - halfSize;
+            Vector2 maximum = obstacle.PositionMeters + halfSize;
+            bool startsWithinClearance = start.X >= minimum.X && start.X <= maximum.X &&
+                start.Y >= minimum.Y && start.Y <= maximum.Y;
+            if (startsWithinClearance)
+            {
+                Vector2 awayFromObstacle = start - obstacle.PositionMeters;
+                if (Vector2.Dot(direction, awayFromObstacle) < -0.0001f)
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (SegmentIntersectsBounds(start, direction, PanicLookAheadMeters, minimum, maximum))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SegmentIntersectsBounds(
+        Vector2 start,
+        Vector2 direction,
+        float length,
+        Vector2 minimum,
+        Vector2 maximum)
+    {
+        float minimumDistance = 0.0f;
+        float maximumDistance = length;
+        return IntersectsAxis(start.X, direction.X, minimum.X, maximum.X, ref minimumDistance, ref maximumDistance) &&
+            IntersectsAxis(start.Y, direction.Y, minimum.Y, maximum.Y, ref minimumDistance, ref maximumDistance);
+    }
+
+    private static bool IntersectsAxis(
+        float start,
+        float direction,
+        float minimum,
+        float maximum,
+        ref float minimumDistance,
+        ref float maximumDistance)
+    {
+        if (MathF.Abs(direction) < 0.0001f)
+        {
+            return start >= minimum && start <= maximum;
+        }
+
+        float firstDistance = (minimum - start) / direction;
+        float secondDistance = (maximum - start) / direction;
+        if (firstDistance > secondDistance)
+        {
+            (firstDistance, secondDistance) = (secondDistance, firstDistance);
+        }
+
+        minimumDistance = MathF.Max(minimumDistance, firstDistance);
+        maximumDistance = MathF.Min(maximumDistance, secondDistance);
+        return minimumDistance <= maximumDistance;
     }
 
     internal static float LimbLaunchSpeed(float fatalLaunchSpeed) =>
