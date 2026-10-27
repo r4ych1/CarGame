@@ -327,6 +327,61 @@ public sealed class TrafficSystemTests
         Assert.True(avoidance.Length() > 0.1f);
     }
 
+    [Fact]
+    public void DriverStopsForCraterAndQueuedCarInLane()
+    {
+        Assert.True(TrafficSystem.HasStoppingHazardAhead(
+            Vector2.Zero,
+            0.0f,
+            [new TrafficObstacle(new Vector2(0.0f, -20.0f), 7.5f)]));
+        Assert.True(TrafficSystem.HasStoppingHazardAhead(
+            Vector2.Zero,
+            0.0f,
+            [new TrafficObstacle(new Vector2(0.0f, -12.0f), 2.6f)]));
+        Assert.False(TrafficSystem.HasStoppingHazardAhead(
+            Vector2.Zero,
+            0.0f,
+            [new TrafficObstacle(new Vector2(12.0f, -10.0f), 2.6f)]));
+        Assert.False(TrafficSystem.HasStoppingHazardAhead(
+            Vector2.Zero,
+            0.0f,
+            [new TrafficObstacle(new Vector2(0.0f, 5.0f), 7.5f)]));
+    }
+
+    [Fact]
+    public void TrafficBrakesToAStopBeforeCraterEdge()
+    {
+        B2WorldDef worldDefinition = b2DefaultWorldDef();
+        worldDefinition.gravity = default;
+        worldDefinition.enableSleep = false;
+        B2WorldId worldId = b2CreateWorld(worldDefinition);
+
+        try
+        {
+            TrafficSystem traffic = new(worldId);
+            TrafficVehicle vehicle = traffic.Vehicles[0];
+            vehicle.PlaceAtRouteIndex(0);
+            Vector2 craterCenter = vehicle.PositionMeters +
+                VehicleMath.Forward(vehicle.RotationRadians) * 25.0f;
+
+            for (int step = 0; step < 600; step++)
+            {
+                traffic.Step(1.0f / 60.0f, [], [craterCenter]);
+                b2World_Step(worldId, 1.0f / 60.0f, 4);
+                traffic.PostPhysicsStep();
+            }
+
+            Assert.InRange(vehicle.LinearVelocityMetersPerSecond.Length(), 0.0f, 0.1f);
+            Assert.True(Vector2.Distance(vehicle.PositionMeters, craterCenter) > 9.5f);
+            Assert.False(vehicle.IsDisabled);
+            Assert.False(vehicle.IsWrecked);
+        }
+        finally
+        {
+            b2DestroyWorld(worldId);
+        }
+    }
+
     private static IEnumerable<float> PairwiseDistances(IReadOnlyList<Vector2> positions)
     {
         for (int first = 0; first < positions.Count; first++)

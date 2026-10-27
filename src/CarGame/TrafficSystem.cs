@@ -74,7 +74,11 @@ internal sealed class TrafficVehicle
         SetPose(routeIndex);
     }
 
-    public void Step(float timeStep, Func<float> nextRespawnDelay, Vector2 avoidance)
+    public void Step(
+        float timeStep,
+        Func<float> nextRespawnDelay,
+        Vector2 avoidance,
+        bool mustStop = false)
     {
         if (!IsActive)
         {
@@ -165,7 +169,8 @@ internal sealed class TrafficVehicle
         float desiredHeading = MathF.Atan2(direction.X, -direction.Y);
         float headingError = NormalizeAngle(desiredHeading - RotationRadians);
         float obstacleSpeedScale = 1.0f - avoidanceStrength * 0.42f;
-        Vector2 desiredVelocity = direction * target.SpeedMetersPerSecond * obstacleSpeedScale;
+        float desiredSpeed = mustStop ? 0.0f : target.SpeedMetersPerSecond * obstacleSpeedScale;
+        Vector2 desiredVelocity = direction * desiredSpeed;
         Vector2 currentVelocity = LinearVelocityMetersPerSecond;
         velocityBeforePhysics = currentVelocity;
         rotationBeforePhysics = RotationRadians;
@@ -319,7 +324,10 @@ internal sealed class TrafficSystem
     public IReadOnlyList<TrafficRoutePoint> Route { get; }
     internal static IReadOnlyList<int[]> InitialSpawnStageCandidates => initialSpawnStageCandidates;
 
-    public void Step(float timeStep, IReadOnlyList<TrafficObstacle> worldObstacles)
+    public void Step(
+        float timeStep,
+        IReadOnlyList<TrafficObstacle> worldObstacles,
+        IReadOnlyList<Vector2>? craterCenters = null)
     {
         for (int index = 0; index < vehicles.Count; index++)
         {
@@ -327,8 +335,60 @@ internal sealed class TrafficSystem
             Vector2 avoidance = vehicle.IsActive && !vehicle.IsDisabled && !vehicle.IsWrecked
                 ? ComputeAvoidance(vehicle, index, worldObstacles)
                 : Vector2.Zero;
-            vehicle.Step(timeStep, NextRespawnDelay, avoidance);
+            bool mustStop = vehicle.IsActive && !vehicle.IsDisabled && !vehicle.IsWrecked &&
+                MustStopAhead(vehicle, index, craterCenters ?? []);
+            vehicle.Step(timeStep, NextRespawnDelay, mustStop ? Vector2.Zero : avoidance, mustStop);
         }
+    }
+
+    private bool MustStopAhead(
+        TrafficVehicle vehicle,
+        int vehicleIndex,
+        IReadOnlyList<Vector2> craterCenters)
+    {
+        List<TrafficObstacle> stoppingHazards = new(craterCenters.Count + vehicles.Count - 1);
+        foreach (Vector2 craterCenter in craterCenters)
+        {
+            stoppingHazards.Add(new(craterCenter, 7.5f));
+        }
+
+        for (int index = 0; index < vehicles.Count; index++)
+        {
+            TrafficVehicle other = vehicles[index];
+            if (index != vehicleIndex && other.IsActive)
+            {
+                stoppingHazards.Add(new(other.PositionMeters, 2.6f));
+            }
+        }
+
+        return HasStoppingHazardAhead(
+            vehicle.PositionMeters,
+            vehicle.RotationRadians,
+            stoppingHazards);
+    }
+
+    internal static bool HasStoppingHazardAhead(
+        Vector2 position,
+        float rotationRadians,
+        IReadOnlyList<TrafficObstacle> hazards)
+    {
+        Vector2 forward = VehicleMath.Forward(rotationRadians);
+        Vector2 right = VehicleMath.Right(rotationRadians);
+        foreach (TrafficObstacle hazard in hazards)
+        {
+            Vector2 relative = hazard.PositionMeters - position;
+            float forwardDistance = Vector2.Dot(relative, forward);
+            float lateralDistance = MathF.Abs(Vector2.Dot(relative, right));
+            float stoppingDistance = 18.0f + hazard.RadiusMeters;
+            float corridorHalfWidth = 0.9f + hazard.RadiusMeters;
+            if (forwardDistance > 0.0f && forwardDistance < stoppingDistance &&
+                lateralDistance < corridorHalfWidth)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private Vector2 ComputeAvoidance(

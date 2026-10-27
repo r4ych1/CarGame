@@ -58,6 +58,7 @@ public sealed class VehicleDamageTests
         }
 
         Assert.Equal(0.0f, world.Vehicle.SpeedMetersPerSecond);
+        Assert.True(world.Vehicle.DamageEffectAgeSeconds > 0.0f);
         world.ExplodeVehicle();
         Assert.True(world.Vehicle.IsExploded);
 

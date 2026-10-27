@@ -48,8 +48,9 @@ code-drawn people with lightweight movement and collision behavior.
   Both use nonlinear distance falloff.
 - Pressing R restores the same people, paths, and living state.
 - Walkers move at roughly 1.5 to 2.3 m/s. Panicked people run at about 8 m/s.
-- A person facing a corpse within 8 metres or an approaching vehicle within
-  10 metres runs away briefly, whether idle or walking. Vehicle-triggered panic
+- A resident facing a corpse within 8 metres or any living person facing an
+  approaching vehicle within 10 metres runs away briefly, whether idle or
+  walking. Guards ignore corpses. Vehicle-triggered panic
   chooses a lateral route out of the lane instead of running ahead of the car.
 - Living people within 44 metres of an explosion panic and run away. People
   inside the 32-metre impact radius also receive its physical force.
@@ -71,8 +72,9 @@ code-drawn people with lightweight movement and collision behavior.
   bridge opening clear. A post-physics position constraint returns any living
   person displaced into the stream to the nearest bank without affecting travel
   across the bridge.
-- Nearby corpses can trigger panic when in the character's forward view. Idle
-  characters can enter the same flee state as walkers.
+- Nearby corpses can trigger resident panic when in the character's forward
+  view. Guards ignore corpses. Idle residents can enter the same flee state as
+  walkers.
 - Vehicle impact and blast deaths disable walking behavior. Vehicle-impact
   bodies receive a short momentum transfer and stop colliding after 0.22
   seconds; blast bodies settle through physics and stop colliding after the
@@ -116,8 +118,9 @@ code-drawn people with lightweight movement and collision behavior.
   leaving a visible, persistent blood pool where it comes to rest. Added
   fragment speed stays between 5 and 14 m/s rather than inheriting the full
   fatal blast launch.
-- People facing a corpse within 8 metres or an approaching vehicle within
-  10 metres flee, and people within 44 metres of an explosion panic. Fleeing
+- Residents facing a corpse within 8 metres and people facing an approaching
+  vehicle within 10 metres flee, while guards ignore corpses. People within 44
+  metres of an explosion panic. Fleeing
   works for idle and walking people. Vehicle-triggered flee direction is lateral
   to the vehicle's travel rather than ahead of it.
 - A panicked person's selected direction does not intersect a town wall, stream
@@ -154,7 +157,8 @@ code-drawn people with lightweight movement and collision behavior.
    beneath every settled fragment and remains visible.
 8. Confirm people thrown prone look smaller than their standing pose without
    becoming difficult to identify.
-9. Leave a corpse near idle and walking people; confirm those who face it flee.
+9. Leave a corpse near idle and walking residents and confirm those who face it
+   flee, while guards remain unaffected by the corpse.
 10. Press R and confirm the population returns to its initial living state.
 
 ## Non-goals

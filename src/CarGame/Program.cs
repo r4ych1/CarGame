@@ -30,6 +30,7 @@ internal static class Program
                 if (Raylib.IsKeyPressed(KeyboardKey.R))
                 {
                     gameWorld.ResetVehicle();
+                    renderer.ResetVisualEffects();
                     accumulator = 0.0;
                 }
 
@@ -45,7 +46,7 @@ internal static class Program
                 }
 
                 renderer.UpdateCamera(gameWorld.Vehicle, input, frameTime);
-                renderer.Draw(gameWorld);
+                renderer.Draw(gameWorld, frameTime);
             }
         }
         finally

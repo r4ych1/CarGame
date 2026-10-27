@@ -92,6 +92,8 @@ internal sealed class Vehicle
 
     public bool IsDisabled => DamagePercent >= 100.0f;
 
+    public float DamageEffectAgeSeconds { get; private set; }
+
     public IReadOnlyList<ExplosionPiece> ExplosionPieces => explosionPieces;
 
     public VehicleSimulationState SimulationState { get; private set; }
@@ -123,6 +125,7 @@ internal sealed class Vehicle
 
         if (IsDisabled)
         {
+            DamageEffectAgeSeconds += fixedTimeStep;
             input = default;
         }
 
@@ -193,6 +196,7 @@ internal sealed class Vehicle
         IsExploded = false;
         IsSunk = false;
         DamagePercent = 0.0f;
+        DamageEffectAgeSeconds = 0.0f;
         b2Body_Enable(bodyId);
         b2Body_SetTransform(bodyId, new B2Vec2(0.0f, 0.0f), b2MakeRot(0.0f));
         b2Body_SetLinearVelocity(bodyId, new B2Vec2(0.0f, 0.0f));
@@ -291,6 +295,10 @@ internal sealed class Vehicle
         }
 
         DamagePercent = Math.Clamp(DamagePercent + amount, 0.0f, 100.0f);
+        if (IsDisabled)
+        {
+            DamageEffectAgeSeconds = 0.0f;
+        }
     }
 
     private ExplosionPieceDefinition[] CreateExplosionLayout()

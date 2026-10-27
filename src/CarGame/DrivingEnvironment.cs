@@ -279,6 +279,7 @@ internal sealed class DrivingEnvironment
     public const float DeadlyBlastRadiusMeters = 16.0f;
     public const float CharacterDeadlyBlastRadiusMeters = 20.0f;
     private const float ExplosionPanicRadiusMeters = BlastRadiusMeters + 12.0f;
+    internal const float GuardInvestigationRadiusMeters = 64.0f;
     internal const float GuardEngagementRangeMeters = 36.0f;
     internal const float GunfirePanicRadiusMeters = 22.0f;
     public static readonly Vector2 BoundaryMinimumMeters = new(-80.0f, -380.0f);
@@ -366,7 +367,7 @@ internal sealed class DrivingEnvironment
                 trafficObstacles.Add(new(prop.PositionMeters, MathF.Max(prop.SizeMeters.X, prop.SizeMeters.Y) * 0.5f));
         if (playerVehicle is not null && !playerVehicle.IsExploded && !playerVehicle.IsSunk)
             trafficObstacles.Add(new(playerVehicle.PositionMeters, 1.5f));
-        Traffic.Step(timeStep, trafficObstacles);
+        Traffic.Step(timeStep, trafficObstacles, craters);
     }
 
     public void PostPhysicsStep(Vehicle playerVehicle)
@@ -444,7 +445,9 @@ internal sealed class DrivingEnvironment
         {
             character.ReactToExplosion(
                 center,
-                ExplosionPanicRadiusMeters,
+                character.Role == CharacterRole.Guard
+                    ? GuardInvestigationRadiusMeters
+                    : ExplosionPanicRadiusMeters,
                 BlastRadiusMeters);
             character.ApplyBlast(center, BlastRadiusMeters, CharacterDeadlyBlastRadiusMeters);
         }
@@ -540,7 +543,7 @@ internal sealed class DrivingEnvironment
         Vehicle? playerVehicle,
         IReadOnlyList<ShotObstacle> shotObstacles)
     {
-        if (playerVehicle is null || playerVehicle.IsExploded || playerVehicle.IsSunk)
+        if (playerVehicle is null || playerVehicle.IsExploded || playerVehicle.IsSunk || playerVehicle.IsDisabled)
         {
             foreach (AmbientCharacter guard in characters)
             {
@@ -597,7 +600,8 @@ internal sealed class DrivingEnvironment
     {
         bool canHitVehicle = playerVehicle is not null &&
             !playerVehicle.IsExploded &&
-            !playerVehicle.IsSunk;
+            !playerVehicle.IsSunk &&
+            !playerVehicle.IsDisabled;
         Vector2 vehiclePosition = canHitVehicle ? playerVehicle!.PositionMeters : Vector2.Zero;
         float vehicleRotation = canHitVehicle ? playerVehicle!.RotationRadians : 0.0f;
         Vector2 vehicleSize = canHitVehicle

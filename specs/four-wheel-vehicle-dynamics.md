@@ -85,7 +85,7 @@ engine RPM, shift state, heave, roll, and pitch.
 ## Powertrain, direction selection, and braking
 
 - The engine uses a piecewise-linear torque curve, 850 RPM idle, 6,500 RPM
-  redline, automatic shift thresholds near 5,800/1,800 RPM, and explicit
+  redline, automatic shift thresholds near 4,800/1,800 RPM, and explicit
   closed-throttle engine-braking torque.
 - Forward ratios are 3.55, 2.10, 1.36, 1.03, and 0.82; final drive is 3.90 and
   reverse is 3.40. Driveline efficiency, wheel radius, and wheel inertia are
@@ -95,6 +95,8 @@ engine RPM, shift state, heave, roll, and pitch.
   between idle and redline.
 - Shifts are hysteretic, interrupt torque for a short deterministic interval,
   and perform at most one gear transition per shift event.
+- The lower upshift threshold and 0.14-second shift interval let sustained
+  acceleration reach fifth gear earlier and with less delay.
 - W requests forward drive except while braking a reversing car. S brakes a
   forward-moving car and selects reverse only near rest; W behaves symmetrically
   while reversing.
@@ -123,8 +125,10 @@ engine RPM, shift state, heave, roll, and pitch.
 - Render a subtle chassis-sized ground shadow cast down and right from the player
   car by the environment's implied upper-left light source.
 - The gameplay HUD replaces diagnostic wheel readouts with a translucent bottom
-  bar containing centered speed, gear, RPM, and damage values. Controls occupy
-  a separate translucent sidebar.
+  bar: speed is fixed at center, small RPM-over-Gear readouts occupy the left,
+  and a nonnumeric HP bar occupies the right. Controls use a separate sidebar.
+- Player and traffic tires leave subtle fading trails; tiny rear-tire smoke puffs
+  appear only at higher speed.
 
 ## Acceptance criteria
 

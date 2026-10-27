@@ -58,9 +58,9 @@ internal static class VehicleCatalog
             ForwardRatios: [3.55f, 2.10f, 1.36f, 1.03f, 0.82f],
             ReverseRatio: 3.40f,
             FinalDriveRatio: 3.90f,
-            UpshiftRevolutionsPerMinute: 5_800.0f,
+            UpshiftRevolutionsPerMinute: 4_800.0f,
             DownshiftRevolutionsPerMinute: 1_800.0f,
-            ShiftDurationSeconds: 0.18f,
+            ShiftDurationSeconds: 0.14f,
             DirectionSelectionSpeedMetersPerSecond: 0.5f),
         new BrakeSettings(
             MaximumBrakingForceNewtons: 12_000.0f,

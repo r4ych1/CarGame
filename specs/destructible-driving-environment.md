@@ -43,13 +43,13 @@ provides scenery, collision, and deterministic blast destruction.
   attached to the trunk's forward end. Trees receive strong outward knockback,
   high angular damping, and limited yaw so they slide and topple away from the
   blast instead of spinning in place.
-- Each explosion leaves a persistent crater centered on the car. Roads can be
-  visually cratered but remain driveable in this prototype.
+- Each explosion leaves a persistent crater centered on the car. The player and
+  physical debris can cross it, but autonomous traffic treats it as impassable.
 - R restores the vehicle and the entire undamaged environment.
 - A visible solid perimeter encloses the complete environment and prevents the
   vehicle or dynamic debris from leaving the playable area.
 - The mouse wheel zooms the camera in and out while preserving its current
-  target. Zoom is clamped between 0.35x and 1.65x so the closest view retains
+  target. Zoom is clamped between 0.35x and 1.35x so the closest view retains
   more surrounding context.
 
 ## Functional requirements

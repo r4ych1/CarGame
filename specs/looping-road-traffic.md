@@ -33,6 +33,11 @@ checkpoint zigzag, and dirt bypass route.
 - Functioning drivers look ahead for disabled or wrecked traffic, the player,
   solid scenery, and movable props. They slow and steer laterally around a
   blocking obstacle, then resume route recovery after passing it.
+- Drivers treat persistent blast craters as impassable road hazards. A first car
+  brakes to a stop before a crater instead of crossing or steering around it;
+  following cars stop behind queued traffic to form a traffic jam.
+- Moving traffic leaves subtle paired tire trails that fade gradually, with tiny
+  rear-tire smoke puffs at higher speed.
 - Any meaningful collision below the disabling threshold preserves the impact
   motion for a 0.55-second driver-reaction window, allowing the car to be
   shoved sideways or fishtail. The driver then brakes progressively and stops
@@ -62,6 +67,8 @@ checkpoint zigzag, and dirt bypass route.
   eastbound arc onto the dirt bypass. The arc remains south of the town wall and
   clear of checkpoint cones before accelerating to dirt-road speed.
 - Despawned bodies are disabled until their fixed-step respawn timer expires.
+- Crater stopping uses the fixed-step traffic controller and a forward stopping
+  corridor; craters remain visual/nonphysical for the player and other objects.
 
 ## Acceptance criteria
 
@@ -85,6 +92,9 @@ checkpoint zigzag, and dirt bypass route.
   recovery is progressive rather than an immediate snap.
 - Obstacle avoidance examines a 14-metre forward corridor and chooses a passing
   side before impact. Disabled cars do not permanently block following traffic.
+- A functioning car brakes for a crater in its forward lane and for a queued car
+  immediately ahead, producing a stable stopped line rather than entering the
+  crater.
 - Non-disabling impacts with at least a 0.3 m/s instantaneous velocity change,
   while moving at least 0.5 m/s, enter the reaction and braking pause instead of
   being immediately overwritten by route control. Recovery never commands a
@@ -115,6 +125,8 @@ checkpoint zigzag, and dirt bypass route.
    but continue coasting in their original direction until rolling to a stop.
 9. Cause both slow and faster non-disabling bumps and confirm the driver reacts,
    brakes to a stop, then attempts to continue forward without backing up.
+10. Detonate on the traffic route and confirm the first arriving car stops before
+    the crater and later arrivals queue behind it without collisions.
 
 ## Non-goals
 

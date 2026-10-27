@@ -5,16 +5,27 @@ namespace CarGame;
 
 internal sealed class GameRenderer
 {
+    private sealed class TireTrailSegment(Vector2 startMeters, Vector2 endMeters)
+    {
+        public Vector2 StartMeters { get; } = startMeters;
+        public Vector2 EndMeters { get; } = endMeters;
+        public float AgeSeconds { get; set; }
+    }
+
+    private readonly record struct TireSample(Vector2 LeftMeters, Vector2 RightMeters);
+
     private const float GridSpacingPixels = SimulationUnits.PixelsPerMeter * 5.0f;
     private const int GridExtent = 40;
     private const float MinimumZoom = 0.35f;
-    private const float MaximumZoom = 1.65f;
+    private const float MaximumZoom = 1.35f;
     private const float ZoomStep = 1.12f;
     private const float ExplodedCameraSpeedMetersPerSecond = 28.0f;
     private static readonly Vector2 GroundShadowDirection = Vector2.Normalize(new Vector2(0.65f, 1.0f));
     private readonly int screenWidth;
     private readonly int screenHeight;
     private readonly Vector2 screenCenter;
+    private readonly Dictionary<object, TireSample> tireSamples = [];
+    private readonly List<TireTrailSegment> tireTrails = [];
     private Vector2 cameraTarget;
     private bool wasExploded;
     private float zoom = 1.0f;
@@ -26,9 +37,10 @@ internal sealed class GameRenderer
         screenCenter = new Vector2(screenWidth / 2.0f, screenHeight / 2.0f);
     }
 
-    public void Draw(GameWorld world)
+    public void Draw(GameWorld world, float elapsedSeconds)
     {
         UpdateZoom(Raylib.GetMouseWheelMove());
+        UpdateTireTrails(world, elapsedSeconds);
         Vehicle vehicle = world.Vehicle;
         Camera2D camera = new()
         {
@@ -58,6 +70,12 @@ internal sealed class GameRenderer
 
     internal float Zoom => zoom;
     internal Vector2 CameraTarget => cameraTarget;
+
+    internal void ResetVisualEffects()
+    {
+        tireSamples.Clear();
+        tireTrails.Clear();
+    }
 
     internal void UpdateCamera(Vehicle vehicle, VehicleInput input, float elapsedSeconds)
     {
@@ -99,7 +117,100 @@ internal sealed class GameRenderer
         zoom = Math.Clamp(zoom, MinimumZoom, MaximumZoom);
     }
 
-    private static void DrawEnvironment(DrivingEnvironment environment)
+    private void UpdateTireTrails(GameWorld world, float elapsedSeconds)
+    {
+        float clampedElapsed = Math.Clamp(elapsedSeconds, 0.0f, 0.25f);
+        for (int index = tireTrails.Count - 1; index >= 0; index--)
+        {
+            tireTrails[index].AgeSeconds += clampedElapsed;
+            if (tireTrails[index].AgeSeconds >= 3.5f)
+            {
+                tireTrails.RemoveAt(index);
+            }
+        }
+
+        Vehicle player = world.Vehicle;
+        SampleTires(
+            player,
+            player.PositionMeters,
+            player.RotationRadians,
+            player.Definition.Chassis.AxleTrackMeters * 0.5f,
+            player.Definition.Chassis.WheelbaseMeters * 0.5f,
+            player.SpeedMetersPerSecond,
+            !player.IsExploded && !player.IsSunk);
+
+        foreach (TrafficVehicle trafficVehicle in world.Environment.Traffic.Vehicles)
+        {
+            SampleTires(
+                trafficVehicle,
+                trafficVehicle.PositionMeters,
+                trafficVehicle.RotationRadians,
+                0.68f,
+                1.42f,
+                trafficVehicle.LinearVelocityMetersPerSecond.Length(),
+                trafficVehicle.IsActive && !trafficVehicle.IsDisabled && !trafficVehicle.IsWrecked);
+        }
+    }
+
+    private void SampleTires(
+        object key,
+        Vector2 centerMeters,
+        float rotationRadians,
+        float halfTrackMeters,
+        float rearAxleOffsetMeters,
+        float speedMetersPerSecond,
+        bool active)
+    {
+        if (!active)
+        {
+            tireSamples.Remove(key);
+            return;
+        }
+
+        Vector2 forward = VehicleMath.Forward(rotationRadians);
+        Vector2 right = VehicleMath.Right(rotationRadians);
+        Vector2 rearCenter = centerMeters - forward * rearAxleOffsetMeters;
+        TireSample current = new(
+            rearCenter - right * halfTrackMeters,
+            rearCenter + right * halfTrackMeters);
+        if (!tireSamples.TryGetValue(key, out TireSample previous) || speedMetersPerSecond < 1.5f)
+        {
+            tireSamples[key] = current;
+            return;
+        }
+
+        float travelMeters = Vector2.Distance(previous.LeftMeters, current.LeftMeters);
+        if (travelMeters > 2.0f)
+        {
+            tireSamples[key] = current;
+            return;
+        }
+
+        if (travelMeters < 0.08f)
+        {
+            return;
+        }
+
+        tireTrails.Add(new(previous.LeftMeters, current.LeftMeters));
+        tireTrails.Add(new(previous.RightMeters, current.RightMeters));
+        tireSamples[key] = current;
+    }
+
+    private void DrawTireTrails()
+    {
+        float scale = SimulationUnits.PixelsPerMeter;
+        foreach (TireTrailSegment trail in tireTrails)
+        {
+            float opacity = Math.Clamp(1.0f - trail.AgeSeconds / 3.5f, 0.0f, 1.0f);
+            Raylib.DrawLineEx(
+                trail.StartMeters * scale,
+                trail.EndMeters * scale,
+                0.10f * scale,
+                new Color(28, 29, 27, (int)(58.0f * opacity)));
+        }
+    }
+
+    private void DrawEnvironment(DrivingEnvironment environment)
     {
         float scale = SimulationUnits.PixelsPerMeter;
         Vector2 mapMinimum = DrivingEnvironment.BoundaryMinimumMeters * scale;
@@ -196,6 +307,7 @@ internal sealed class GameRenderer
             Raylib.DrawCircleV(center, 7.0f * scale, new Color(45, 36, 29, 255));
             Raylib.DrawCircleLines((int)center.X, (int)center.Y, 8.0f * scale, new Color(93, 70, 45, 255));
         }
+        DrawTireTrails();
         foreach (SceneryObject item in environment.Scenery)
         {
             if (item.IsDestroyed) continue;
@@ -545,6 +657,15 @@ internal sealed class GameRenderer
         {
             DrawDisabledTrafficEngine(vehicle, center, size, scale);
         }
+        else
+        {
+            DrawRearTireSmoke(
+                vehicle.PositionMeters,
+                vehicle.RotationRadians,
+                0.68f,
+                1.42f,
+                vehicle.LinearVelocityMetersPerSecond.Length());
+        }
     }
 
     private static void DrawDisabledTrafficEngine(
@@ -571,6 +692,89 @@ internal sealed class GameRenderer
             float radius = (0.20f + phase * 0.42f) * scale;
             byte alpha = (byte)(150.0f * (1.0f - phase));
             Raylib.DrawCircleV(smokeCenter, radius, new Color(61, 61, 58, (int)alpha));
+        }
+    }
+
+    private static void DrawRearTireSmoke(
+        Vector2 centerMeters,
+        float rotationRadians,
+        float halfTrackMeters,
+        float rearAxleOffsetMeters,
+        float speedMetersPerSecond)
+    {
+        if (speedMetersPerSecond < 9.0f)
+        {
+            return;
+        }
+
+        float scale = SimulationUnits.PixelsPerMeter;
+        float age = (float)Raylib.GetTime();
+        float speedOpacity = Math.Clamp((speedMetersPerSecond - 9.0f) / 10.0f, 0.0f, 1.0f);
+        Vector2 forward = VehicleMath.Forward(rotationRadians);
+        Vector2 right = VehicleMath.Right(rotationRadians);
+        Vector2 rearCenter = centerMeters - forward * rearAxleOffsetMeters;
+        foreach (float side in new[] { -1.0f, 1.0f })
+        {
+            Vector2 tire = rearCenter + right * side * halfTrackMeters;
+            for (int index = 0; index < 2; index++)
+            {
+                float phase = (age * 1.7f + index * 0.51f + (side > 0.0f ? 0.19f : 0.0f)) % 1.0f;
+                Vector2 puff = tire - forward * (0.12f + phase * 0.62f) +
+                    right * MathF.Sin((phase + index) * 5.0f) * 0.05f;
+                float radius = (0.045f + phase * 0.085f) * scale;
+                int alpha = (int)(45.0f * speedOpacity * (1.0f - phase));
+                Raylib.DrawCircleV(puff * scale, radius, new Color(120, 120, 113, alpha));
+            }
+        }
+    }
+
+    private static void DrawDisabledPlayerEngine(Vehicle vehicle, Vector2 center, float length)
+    {
+        Vector2 forward = VehicleMath.Forward(vehicle.RotationRadians);
+        Vector2 right = VehicleMath.Right(vehicle.RotationRadians);
+        Vector2 engine = center + forward * length * 0.32f;
+        float age = vehicle.DamageEffectAgeSeconds;
+        float scale = SimulationUnits.PixelsPerMeter;
+        for (int index = 0; index < 5; index++)
+        {
+            float phase = (age * 0.38f + index * 0.21f) % 1.0f;
+            Vector2 smokeCenter = engine - forward * phase * 1.25f * scale +
+                right * MathF.Sin((phase + index) * 4.7f) * 0.16f * scale;
+            float radius = (0.16f + phase * 0.38f) * scale;
+            int alpha = (int)(155.0f * (1.0f - phase));
+            Raylib.DrawCircleV(smokeCenter, radius, new Color(57, 58, 55, alpha));
+        }
+    }
+
+    private static void DrawWindshieldCracks(
+        Vehicle vehicle,
+        Vector2 windshieldCenter,
+        float width,
+        float length)
+    {
+        int crackCount = Math.Clamp((int)MathF.Ceiling(vehicle.DamagePercent / 25.0f), 0, 4);
+        if (crackCount == 0)
+        {
+            return;
+        }
+
+        Vector2 forward = VehicleMath.Forward(vehicle.RotationRadians);
+        Vector2 right = VehicleMath.Right(vehicle.RotationRadians);
+        Vector2 crackOrigin = windshieldCenter - right * width * 0.10f + forward * length * 0.015f;
+        Vector2[] branchOffsets =
+        [
+            right * width * 0.22f + forward * length * 0.06f,
+            -right * width * 0.18f + forward * length * 0.08f,
+            right * width * 0.26f - forward * length * 0.05f,
+            -right * width * 0.25f - forward * length * 0.07f,
+        ];
+        for (int index = 0; index < crackCount; index++)
+        {
+            Vector2 midpoint = crackOrigin + branchOffsets[index] * 0.48f +
+                (index % 2 == 0 ? right : -right) * 1.5f;
+            Vector2 endpoint = crackOrigin + branchOffsets[index];
+            Raylib.DrawLineEx(crackOrigin, midpoint, 1.4f, new Color(43, 57, 61, 220));
+            Raylib.DrawLineEx(midpoint, endpoint, 1.1f, new Color(220, 235, 237, 205));
         }
     }
 
@@ -1165,12 +1369,26 @@ internal sealed class GameRenderer
             new Vector2(width * 0.36f, length * 0.125f),
             rotationDegrees,
             new Color(139, 201, 218, 255));
+        DrawWindshieldCracks(vehicle, windshieldCenter, width, length);
 
         Vector2 nose = visualCenter + (VehicleMath.Forward(vehicle.RotationRadians) * length * 0.43f);
         Raylib.DrawCircleV(nose, 4.0f, Color.Gold);
         if (vehicle.IsSunk)
         {
             Raylib.DrawCircleLines((int)vehicle.Position.X, (int)vehicle.Position.Y, width * 0.8f, new Color(126, 190, 211, 220));
+        }
+        else if (vehicle.IsDisabled)
+        {
+            DrawDisabledPlayerEngine(vehicle, visualCenter, length);
+        }
+        else
+        {
+            DrawRearTireSmoke(
+                vehicle.PositionMeters,
+                vehicle.RotationRadians,
+                vehicle.Definition.Chassis.AxleTrackMeters * 0.5f,
+                vehicle.Definition.Chassis.WheelbaseMeters * 0.5f,
+                vehicle.SpeedMetersPerSecond);
         }
     }
 
@@ -1230,21 +1448,36 @@ internal sealed class GameRenderer
         int bottomBarY = screenHeight - bottomBarHeight;
         Raylib.DrawRectangle(0, bottomBarY, screenWidth, bottomBarHeight, new Color(10, 14, 13, 178));
 
-        string primaryStatus =
-            $"Speed {speedKilometersPerHour:0} km/h     Gear {gear}     RPM {state.EngineRevolutionsPerMinute:0}     Damage {vehicle.DamagePercent:0}%";
-        const int primaryFontSize = 24;
-        int primaryX = (screenWidth - Raylib.MeasureText(primaryStatus, primaryFontSize)) / 2;
-        int primaryY = bottomBarY + (vehicle.IsExploded || vehicle.IsSunk || vehicle.IsDisabled ? 10 : 23);
-        Color damageColor = vehicle.DamagePercent >= 75.0f ? Color.Orange : Color.RayWhite;
-        Raylib.DrawText(primaryStatus, primaryX, primaryY, primaryFontSize, damageColor);
+        const int smallFontSize = 16;
+        Raylib.DrawText($"RPM  {state.EngineRevolutionsPerMinute,4:0}", 34, bottomBarY + 10, smallFontSize, Color.LightGray);
+        Raylib.DrawText($"GEAR {gear,4}", 34, bottomBarY + 38, smallFontSize, Color.LightGray);
+
+        string speedStatus = $"{speedKilometersPerHour:0} km/h";
+        const int speedFontSize = 28;
+        int speedX = (screenWidth - Raylib.MeasureText(speedStatus, speedFontSize)) / 2;
+        int speedY = bottomBarY + (vehicle.IsExploded || vehicle.IsSunk ? 8 : 22);
+        Raylib.DrawText(speedStatus, speedX, speedY, speedFontSize, Color.RayWhite);
+
+        const int hpBarWidth = 210;
+        const int hpBarHeight = 18;
+        int hpBarX = screenWidth - hpBarWidth - 34;
+        int hpBarY = bottomBarY + 31;
+        float healthFraction = Math.Clamp(1.0f - vehicle.DamagePercent / 100.0f, 0.0f, 1.0f);
+        Color hpColor = healthFraction > 0.5f
+            ? new Color(76, 190, 92, 255)
+            : healthFraction > 0.2f
+                ? new Color(226, 166, 55, 255)
+                : new Color(207, 67, 55, 255);
+        Raylib.DrawText("HP", hpBarX, bottomBarY + 9, smallFontSize, Color.LightGray);
+        Raylib.DrawRectangle(hpBarX, hpBarY, hpBarWidth, hpBarHeight, new Color(36, 42, 40, 235));
+        Raylib.DrawRectangle(hpBarX + 2, hpBarY + 2, (int)((hpBarWidth - 4) * healthFraction), hpBarHeight - 4, hpColor);
+        Raylib.DrawRectangleLines(hpBarX, hpBarY, hpBarWidth, hpBarHeight, new Color(145, 153, 149, 230));
 
         string? condition = vehicle.IsExploded
-            ? "EXPLODED — R Reset"
+            ? "EXPLODED - R Reset"
             : vehicle.IsSunk
-                ? "SUNK IN DEEP WATER — R Reset"
-                : vehicle.IsDisabled
-                    ? "VEHICLE DISABLED — Space Detonator / R Reset"
-                    : null;
+                ? "SUNK IN DEEP WATER - R Reset"
+                : null;
         if (condition is not null)
         {
             const int conditionFontSize = 18;

@@ -574,12 +574,12 @@ public sealed class DrivingEnvironmentTests
     }
 
     [Fact]
-    public void GuardsFleeInsideBlastAreaAndInvestigateOutsideIt()
+    public void GuardsFleeInsideBlastAreaAndInvestigateOnlyWithinResponseRadius()
     {
         using GameWorld world = new();
         AmbientCharacter[] guards = world.Environment.Characters
             .Where(character => character.Role == CharacterRole.Guard)
-            .Take(2)
+            .Take(3)
             .ToArray();
 
         guards[0].ReactToExplosion(
@@ -587,40 +587,75 @@ public sealed class DrivingEnvironmentTests
             44.0f,
             DrivingEnvironment.BlastRadiusMeters);
         guards[1].ReactToExplosion(
-            guards[1].PositionMeters - Vector2.UnitX * 140.0f,
-            44.0f,
+            guards[1].PositionMeters - Vector2.UnitX * 48.0f,
+            DrivingEnvironment.GuardInvestigationRadiusMeters,
+            DrivingEnvironment.BlastRadiusMeters);
+        guards[2].ReactToExplosion(
+            guards[2].PositionMeters - Vector2.UnitX * 80.0f,
+            DrivingEnvironment.GuardInvestigationRadiusMeters,
             DrivingEnvironment.BlastRadiusMeters);
 
         Assert.True(guards[0].IsPanicking);
         Assert.False(guards[0].IsInvestigating);
         Assert.False(guards[1].IsPanicking);
         Assert.True(guards[1].IsInvestigating);
+        Assert.False(guards[2].IsPanicking);
+        Assert.False(guards[2].IsInvestigating);
     }
 
     [Fact]
-    public void InvestigatingGuardKeepsWalkingAroundGroundZeroAfterArrival()
+    public void InvestigatingGuardWalksBackTowardPostAfterArrival()
     {
         using GameWorld world = new();
         AmbientCharacter guard = world.Environment.Characters
             .First(character => character.PositionMeters == new Vector2(-26.0f, -212.0f));
         Vector2 blastCenter = guard.PositionMeters - Vector2.UnitX * 34.0f;
-        world.Environment.Explode(blastCenter);
+        guard.ReactToExplosion(
+            blastCenter,
+            DrivingEnvironment.GuardInvestigationRadiusMeters,
+            DrivingEnvironment.BlastRadiusMeters);
 
-        for (int step = 0; step < 480; step++)
+        for (int step = 0; step < 600 && guard.IsInvestigating; step++)
         {
             world.Step(default, 1.0f / 60.0f, 4);
         }
-        Vector2 firstPatrolPosition = guard.PositionMeters;
+        Vector2 arrivalPosition = guard.PositionMeters;
 
-        for (int step = 0; step < 120; step++)
+        for (int step = 0; step < 90; step++)
         {
             world.Step(default, 1.0f / 60.0f, 4);
         }
-        Vector2 secondPatrolPosition = guard.PositionMeters;
+        Vector2 walkingAwayPosition = guard.PositionMeters;
 
-        Assert.True(guard.IsInvestigating);
-        Assert.InRange(Vector2.Distance(firstPatrolPosition, blastCenter), 3.0f, 10.0f);
-        Assert.InRange(Vector2.Distance(secondPatrolPosition, blastCenter), 3.0f, 10.0f);
-        Assert.True(Vector2.Distance(firstPatrolPosition, secondPatrolPosition) > 0.5f);
+        Assert.False(guard.IsInvestigating);
+        Assert.True(guard.IsReturningToPost);
+        Assert.InRange(Vector2.Distance(arrivalPosition, blastCenter), 6.0f, 10.0f);
+        Assert.True(Vector2.Distance(walkingAwayPosition, blastCenter) >
+            Vector2.Distance(arrivalPosition, blastCenter) + 0.5f);
+    }
+
+    [Fact]
+    public void GuardsIgnoreCorpsesAndDisengageFromDisabledPlayer()
+    {
+        using GameWorld world = new();
+        AmbientCharacter guard = world.Environment.Characters
+            .First(character => character.Role == CharacterRole.Guard);
+
+        guard.TryFleeFromCorpse(guard.PositionMeters + Vector2.UnitX, 8.0f);
+        Assert.False(guard.IsPanicking);
+
+        guard.UpdateGuardAggro(
+            guard.PositionMeters + Vector2.UnitX * 10.0f,
+            DrivingEnvironment.GuardEngagementRangeMeters,
+            true);
+        Assert.True(guard.IsAggroed);
+
+        world.Vehicle.ApplyCollisionDamage(28.0f);
+        world.Vehicle.ApplyCollisionDamage(28.0f);
+        world.Environment.Step(1.0f / 60.0f, world.Vehicle);
+
+        Assert.True(world.Vehicle.IsDisabled);
+        Assert.False(guard.IsAggroed);
+        Assert.Empty(world.Environment.GuardRounds);
     }
 }

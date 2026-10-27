@@ -5,6 +5,16 @@ namespace CarGame.Tests;
 
 public sealed class VehicleDynamicsTests
 {
+    [Fact]
+    public void FirstCarUsesEarlierQuickAutomaticUpshifts()
+    {
+        TransmissionSettings transmission = VehicleCatalog.FirstCar.Transmission;
+
+        Assert.Equal(4_800.0f, transmission.UpshiftRevolutionsPerMinute);
+        Assert.Equal(0.14f, transmission.ShiftDurationSeconds);
+        Assert.Equal(5, transmission.ForwardRatios.Length);
+    }
+
     private const float FixedTimeStep = 1.0f / 60.0f;
     private const float Tolerance = 0.02f;
 

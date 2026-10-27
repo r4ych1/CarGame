@@ -30,9 +30,10 @@ differently from civilians when an explosion happens outside its damage radius.
 - Guards inside the 32-metre explosion damage radius use the existing person
   response: they die within the expanded 20-metre deadly zone or are thrown down
   in the outer damage band, and living guards flee away after recovering.
-- Guards outside the damage radius run toward the blast to investigate, stopping
-  about 8 metres from its center, then continuously walk a small perimeter around
-  ground zero. Investigation overrides their original post until reset.
+- Guards from 32 to 64 metres from a blast run toward it to investigate. Once
+  they reach about 8 metres from ground zero, they stop investigating and walk
+  casually back toward their authored post instead of loitering at the crater.
+- Guards farther than 64 metres from a blast do not investigate it.
 - A guard that sees an approaching car within 10 metres stops firing and flees
   laterally out of its path. Walls and solid objects block this sight check.
 - Pressing R restores guard positions, life state, investigation state, and all
@@ -51,12 +52,14 @@ differently from civilians when an explosion happens outside its damage radius.
 - Rounds use deterministic two-dimensional segment-versus-oriented-car collision
   plus segment-versus-obstacle collision, and are removed after impact or after
   travelling beyond their useful lifetime.
-- A dead, knocked-down, panicking, or investigating guard cannot fire.
+- A dead, knocked-down, panicking, investigating, or returning guard cannot fire.
+- Guards disengage and stop firing as soon as the player car reaches 100% damage.
+- Guards ignore corpses; corpse-triggered panic applies only to residents.
 - Gunfire panic temporarily overrides a resident's authored activity and uses the
   existing wall-aware flee steering.
 - Investigation uses the existing wall-aware steering and does not enter the
-  visible stream outside the bridge. After reaching ground zero, the guard keeps
-  walking around it rather than stopping.
+  visible stream outside the bridge. Reaching the blast standoff transitions the
+  guard to the existing casual return-to-post behavior.
 - Rendering uses Raylib primitives for uniforms, rifles, muzzle flashes, tracers,
   and impact sparks; no image assets are added.
 
@@ -78,8 +81,10 @@ differently from civilians when an explosion happens outside its damage radius.
   not continue through the car, and applies damage exactly once.
 - Guards can be killed by a moving vehicle and use the same persistent corpse and
   blood behavior as residents.
-- A surviving guard inside 32 metres flees an explosion; a guard outside
-  32 metres investigates it instead and patrols around ground zero after arriving.
+- A surviving guard inside 32 metres flees an explosion; a guard from 32 to 64
+  metres investigates it and then walks away toward their post after arriving;
+  guards beyond 64 metres do not react.
+- Guards do not panic when facing a corpse and do not fire at a disabled player car.
 - A guard with unobstructed sight of an approaching car within 10 metres flees;
   a wall-hidden car does not trigger that response.
 - Reset restores all six guards and clears active rounds.
@@ -105,8 +110,9 @@ differently from civilians when an explosion happens outside its damage radius.
 7. Run over a guard and confirm the same brief physical knock, flattened corpse,
    and blood pool used for other people.
 8. Explode with a guard in the outer damage band and confirm the survivor is
-   thrown down and then flees. Observe a more distant guard and confirm they run
-   toward the blast, stop short of its center, and continue walking around it.
+   thrown down and then flees. Confirm a guard within 64 metres runs toward the
+   blast and walks back toward their post after reaching it, while a farther
+   guard does not investigate.
 9. Press R and confirm all guards return to their posts and all rounds disappear.
 
 ## Non-goals

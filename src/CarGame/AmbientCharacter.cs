@@ -376,11 +376,8 @@ internal sealed class AmbientCharacter
             }
             else
             {
-                ApplyGuardPatrol(
-                    investigationTargetMeters,
-                    6.0f,
-                    2.0f,
-                    panicObstacles ?? []);
+                isInvestigating = false;
+                isReturningToPost = true;
             }
             return;
         }
@@ -654,6 +651,11 @@ internal sealed class AmbientCharacter
         float distance = awayFromBlast.Length();
         if (Role == CharacterRole.Guard && damageRadiusMeters > 0.0f)
         {
+            if (distance > panicRadiusMeters)
+            {
+                return;
+            }
+
             isAggroed = false;
             isReturningToPost = false;
             if (distance <= damageRadiusMeters)
@@ -691,7 +693,7 @@ internal sealed class AmbientCharacter
     {
         round = null;
         if (Role != CharacterRole.Guard || !isAggroed || IsDead || IsKnockedDown ||
-            IsPanicking || IsInvestigating)
+            IsPanicking || IsInvestigating || IsReturningToPost)
         {
             return false;
         }
@@ -736,7 +738,7 @@ internal sealed class AmbientCharacter
             return;
         }
 
-        if (hasLineOfSight && !IsKnockedDown && !IsInvestigating)
+        if (hasLineOfSight && !IsKnockedDown && !IsInvestigating && !IsReturningToPost)
         {
             isAggroed = true;
             isReturningToPost = false;
@@ -763,7 +765,7 @@ internal sealed class AmbientCharacter
 
     public void TryFleeFromCorpse(Vector2 corpsePositionMeters, float triggerDistanceMeters)
     {
-        if (IsDead || panicTimerSeconds > 0.0f)
+        if (Role == CharacterRole.Guard || IsDead || panicTimerSeconds > 0.0f)
         {
             return;
         }
