@@ -352,6 +352,36 @@ public sealed class DrivingEnvironmentTests
     }
 
     [Fact]
+    public void PanicSteeringAvoidsIntactBuildingsButNotDestroyedBuildings()
+    {
+        using GameWorld world = new();
+        SceneryObject building = Assert.Single(world.Environment.Scenery, item =>
+            item.Kind == SceneryKind.Building && item.PositionMeters == new Vector2(-18.0f, -265.0f));
+        WallSegment buildingBarrier = Assert.Single(world.Environment.PedestrianPanicBarriers, barrier =>
+            barrier.PositionMeters == building.PositionMeters && barrier.SizeMeters == building.SizeMeters);
+        Vector2 approachPosition = building.PositionMeters -
+            new Vector2(building.SizeMeters.X * 0.5f + 4.0f, 0.0f);
+
+        Vector2 detour = AmbientCharacter.ChoosePanicDirection(
+            approachPosition,
+            Vector2.UnitX,
+            world.Environment.PedestrianPanicBarriers);
+
+        Assert.True(MathF.Abs(detour.Y) > 0.8f);
+
+        world.Environment.Explode(building.PositionMeters);
+
+        Assert.True(building.IsDestroyed);
+        Assert.DoesNotContain(buildingBarrier, world.Environment.PedestrianPanicBarriers);
+        Assert.Equal(
+            Vector2.UnitX,
+            AmbientCharacter.ChoosePanicDirection(
+                approachPosition,
+                Vector2.UnitX,
+                world.Environment.PedestrianPanicBarriers));
+    }
+
+    [Fact]
     public void VehicleImpactBrieflyTransfersMomentumBeforeDisablingCollision()
     {
         using GameWorld world = new();
@@ -489,6 +519,9 @@ public sealed class DrivingEnvironmentTests
             new Vector2(2.0f, 4.2f));
 
         Assert.True(round.HasImpacted);
+        Assert.True(round.HitVehicle);
+        Assert.True(round.ConsumeVehicleImpact());
+        Assert.False(round.ConsumeVehicleImpact());
         Assert.InRange(round.PositionMeters.X, -2.11f, -2.09f);
     }
 
@@ -515,6 +548,8 @@ public sealed class DrivingEnvironmentTests
             [blocker]);
 
         Assert.True(round.HasImpacted);
+        Assert.False(round.HitVehicle);
+        Assert.False(round.ConsumeVehicleImpact());
         Assert.InRange(round.PositionMeters.X, -1.01f, -0.99f);
     }
 

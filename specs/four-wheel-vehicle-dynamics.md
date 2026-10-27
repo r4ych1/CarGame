@@ -122,7 +122,9 @@ engine RPM, shift state, heave, roll, and pitch.
   that never changes collision geometry.
 - Render a subtle chassis-sized ground shadow cast down and right from the player
   car by the environment's implied upper-left light source.
-- Display gear, RPM, ABS activity, and compact FL/FR/RL/RR load and grip values.
+- The gameplay HUD replaces diagnostic wheel readouts with a translucent bottom
+  bar containing centered speed, gear, RPM, and damage values. Controls occupy
+  a separate translucent sidebar.
 
 ## Acceptance criteria
 
@@ -178,8 +180,8 @@ engine RPM, shift state, heave, roll, and pitch.
 ## Non-goals
 
 - Separate Box2D wheel bodies or suspension constraints.
-- Road bumps, camber, toe, tire temperature or wear, aerodynamic downforce,
-  damage, or manufacturer-accurate calibration.
+- Road bumps, camber, toe, tire temperature or wear, aerodynamic downforce, or
+  manufacturer-accurate calibration.
 - Traction control, a limited-slip differential, an ABS toggle, intentional
   locked-wheel behavior, or manual transmission controls.
 - Suspension influence on Box2D planar orientation or collision geometry;

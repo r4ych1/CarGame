@@ -23,7 +23,7 @@ public sealed class CameraZoomTests
         GameRenderer renderer = new(1280, 720);
 
         renderer.UpdateZoom(100.0f);
-        Assert.Equal(2.5f, renderer.Zoom);
+        Assert.Equal(1.65f, renderer.Zoom);
 
         renderer.UpdateZoom(-200.0f);
         Assert.Equal(0.35f, renderer.Zoom);

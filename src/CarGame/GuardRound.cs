@@ -13,6 +13,7 @@ internal sealed class GuardRound
     private const float MaximumLifetimeSeconds = 0.8f;
     private const float ImpactLifetimeSeconds = 0.14f;
     private float ageSeconds;
+    private bool vehicleImpactConsumed;
 
     public GuardRound(Vector2 positionMeters, Vector2 direction)
     {
@@ -25,6 +26,7 @@ internal sealed class GuardRound
     public Vector2 PreviousPositionMeters { get; private set; }
     public Vector2 VelocityMetersPerSecond { get; }
     public bool HasImpacted { get; private set; }
+    public bool HitVehicle { get; private set; }
     public bool IsExpired => HasImpacted
         ? ageSeconds >= ImpactLifetimeSeconds
         : ageSeconds >= MaximumLifetimeSeconds;
@@ -46,6 +48,7 @@ internal sealed class GuardRound
         PreviousPositionMeters = PositionMeters;
         Vector2 nextPosition = PositionMeters + VelocityMetersPerSecond * timeStep;
         float nearestIntersection = float.PositiveInfinity;
+        bool hitVehicle = false;
         if (canHitVehicle && TryIntersectOrientedRectangle(
             PreviousPositionMeters,
             nextPosition,
@@ -55,6 +58,7 @@ internal sealed class GuardRound
             out float intersectionFraction))
         {
             nearestIntersection = intersectionFraction;
+            hitVehicle = true;
         }
 
         foreach (ShotObstacle obstacle in obstacles ?? [])
@@ -65,9 +69,11 @@ internal sealed class GuardRound
                 obstacle.PositionMeters,
                 obstacle.RotationRadians,
                 obstacle.SizeMeters,
-                out float obstacleIntersection))
+                out float obstacleIntersection) &&
+                obstacleIntersection <= nearestIntersection)
             {
-                nearestIntersection = MathF.Min(nearestIntersection, obstacleIntersection);
+                nearestIntersection = obstacleIntersection;
+                hitVehicle = false;
             }
         }
 
@@ -75,11 +81,23 @@ internal sealed class GuardRound
         {
             PositionMeters = Vector2.Lerp(PreviousPositionMeters, nextPosition, nearestIntersection);
             HasImpacted = true;
+            HitVehicle = hitVehicle;
             ageSeconds = 0.0f;
             return;
         }
 
         PositionMeters = nextPosition;
+    }
+
+    public bool ConsumeVehicleImpact()
+    {
+        if (!HitVehicle || vehicleImpactConsumed)
+        {
+            return false;
+        }
+
+        vehicleImpactConsumed = true;
+        return true;
     }
 
     internal static bool TryIntersectOrientedRectangle(

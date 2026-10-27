@@ -11,6 +11,7 @@ namespace CarGame;
 internal sealed class Vehicle
 {
     private const float ExplosionImpulsePerKilogram = 18.0f;
+    internal const float GuardRoundDamage = 8.0f;
     private readonly B2BodyId bodyId;
     private readonly B2WorldId worldId;
     private readonly List<ExplosionPiece> explosionPieces = [];
@@ -30,6 +31,7 @@ internal sealed class Vehicle
         ChassisSettings chassis = definition.Chassis;
         B2ShapeDef shapeDefinition = b2DefaultShapeDef();
         shapeDefinition.density = 1.0f;
+        shapeDefinition.enableHitEvents = true;
         B2Polygon bodyShape = b2MakeBox(chassis.WidthMeters / 2.0f, chassis.LengthMeters / 2.0f);
         b2CreatePolygonShape(bodyId, shapeDefinition, bodyShape);
 
@@ -80,9 +82,15 @@ internal sealed class Vehicle
 
     public VehicleDefinition Definition { get; }
 
+    internal B2BodyId BodyId => bodyId;
+
     public bool IsExploded { get; private set; }
 
     public bool IsSunk { get; private set; }
+
+    public float DamagePercent { get; private set; }
+
+    public bool IsDisabled => DamagePercent >= 100.0f;
 
     public IReadOnlyList<ExplosionPiece> ExplosionPieces => explosionPieces;
 
@@ -111,6 +119,11 @@ internal sealed class Vehicle
             b2Body_SetLinearVelocity(bodyId, default);
             b2Body_SetAngularVelocity(bodyId, 0.0f);
             return;
+        }
+
+        if (IsDisabled)
+        {
+            input = default;
         }
 
         B2Vec2 velocity = b2Body_GetLinearVelocity(bodyId);
@@ -179,6 +192,7 @@ internal sealed class Vehicle
         explosionPieces.Clear();
         IsExploded = false;
         IsSunk = false;
+        DamagePercent = 0.0f;
         b2Body_Enable(bodyId);
         b2Body_SetTransform(bodyId, new B2Vec2(0.0f, 0.0f), b2MakeRot(0.0f));
         b2Body_SetLinearVelocity(bodyId, new B2Vec2(0.0f, 0.0f));
@@ -241,6 +255,42 @@ internal sealed class Vehicle
         IsSunk = true;
         b2Body_SetLinearVelocity(bodyId, default);
         b2Body_SetAngularVelocity(bodyId, 0.0f);
+    }
+
+    public void ApplyCollisionDamage(float approachSpeedMetersPerSecond) =>
+        ApplyDamage(CalculateCollisionDamage(approachSpeedMetersPerSecond));
+
+    public void ApplyGuardRoundDamage() => ApplyDamage(GuardRoundDamage);
+
+    internal static float CalculateCollisionDamage(float approachSpeedMetersPerSecond)
+    {
+        if (approachSpeedMetersPerSecond <= 4.0f)
+        {
+            return 0.0f;
+        }
+
+        if (approachSpeedMetersPerSecond <= 10.0f)
+        {
+            return 8.0f * (approachSpeedMetersPerSecond - 4.0f) / 6.0f;
+        }
+
+        if (approachSpeedMetersPerSecond <= 18.0f)
+        {
+            return 8.0f + 27.0f * (approachSpeedMetersPerSecond - 10.0f) / 8.0f;
+        }
+
+        float severeDamage = 35.0f + 35.0f * (approachSpeedMetersPerSecond - 18.0f) / 10.0f;
+        return Math.Clamp(severeDamage, 35.0f, 70.0f);
+    }
+
+    private void ApplyDamage(float amount)
+    {
+        if (IsExploded || IsSunk || amount <= 0.0f)
+        {
+            return;
+        }
+
+        DamagePercent = Math.Clamp(DamagePercent + amount, 0.0f, 100.0f);
     }
 
     private ExplosionPieceDefinition[] CreateExplosionLayout()

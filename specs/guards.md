@@ -22,7 +22,8 @@ differently from civilians when an explosion happens outside its damage radius.
   their authored post before resuming their standing or perimeter activity.
 - Rounds collide with intervening solid objects and walls instead of travelling
   through them if something moves into the firing line.
-- Gunshots do not add vehicle health or a game-over state in this increment.
+- Each round that reaches the player car adds 8% vehicle damage. Accumulated
+  damage can disable the car without automatically detonating it.
 - Non-guard people within 22 metres of a shot run away from the guard who fired.
 - Guards use the same physical body and death behavior as other people, so the
   player and traffic can run them over.
@@ -74,7 +75,7 @@ differently from civilians when an explosion happens outside its damage radius.
   whichever it reaches first.
 - A shot causes living residents within 22 metres to panic away from its source.
 - A round crossing the player's oriented chassis is marked as an impact and does
-  not continue through the car.
+  not continue through the car, and applies damage exactly once.
 - Guards can be killed by a moving vehicle and use the same persistent corpse and
   blood behavior as residents.
 - A surviving guard inside 32 metres flees an explosion; a guard outside
@@ -88,8 +89,8 @@ differently from civilians when an explosion happens outside its damage radius.
 
 1. Drive north to the checkpoint and confirm three armed guards are visible there,
    followed by three more just inside the town entrance.
-2. Enter a guard's range and confirm the guard turns, fires readable tracers, and
-   produces sparks when rounds reach the car.
+2. Enter a guard's range and confirm the guard turns, fires readable tracers,
+   produces sparks when rounds reach the car, and adds 8% damage per hit.
 3. Put a building, prop, traffic vehicle, and town wall between the car and a
    guard; confirm the guard does not fire through them and moving cover catches
    an already-fired round.
@@ -110,8 +111,8 @@ differently from civilians when an explosion happens outside its damage radius.
 
 ## Non-goals
 
-- Player vehicle health, bullet damage, game-over behavior, guard cover tactics,
-  patrol routes, reloading, ammunition, return fire, sound, or general pathfinding.
+- Game-over screens, guard cover tactics, patrol routes, reloading, ammunition,
+  return fire, sound, or general pathfinding.
 
 ## Open decisions
 

@@ -8,10 +8,12 @@ internal sealed class GameRenderer
     private const float GridSpacingPixels = SimulationUnits.PixelsPerMeter * 5.0f;
     private const int GridExtent = 40;
     private const float MinimumZoom = 0.35f;
-    private const float MaximumZoom = 2.5f;
+    private const float MaximumZoom = 1.65f;
     private const float ZoomStep = 1.12f;
     private const float ExplodedCameraSpeedMetersPerSecond = 28.0f;
     private static readonly Vector2 GroundShadowDirection = Vector2.Normalize(new Vector2(0.65f, 1.0f));
+    private readonly int screenWidth;
+    private readonly int screenHeight;
     private readonly Vector2 screenCenter;
     private Vector2 cameraTarget;
     private bool wasExploded;
@@ -19,6 +21,8 @@ internal sealed class GameRenderer
 
     public GameRenderer(int screenWidth, int screenHeight)
     {
+        this.screenWidth = screenWidth;
+        this.screenHeight = screenHeight;
         screenCenter = new Vector2(screenWidth / 2.0f, screenHeight / 2.0f);
     }
 
@@ -245,7 +249,9 @@ internal sealed class GameRenderer
             _ => MathF.Sin(phase * 0.32f) * 0.08f,
         };
         Vector2 center = character.PositionMeters * scale;
-        Vector2 headCenter = center + forward * (0.15f * figureScale);
+        Vector2 headCenter = character.Role == CharacterRole.Guard
+            ? center
+            : center + forward * (0.15f * figureScale);
         Vector2 shoulder = center + forward * (0.06f * figureScale);
         Vector2 hips = center - forward * (0.14f * figureScale);
         Color clothing = ToRaylibColor(character.ClothingColor);
@@ -1215,56 +1221,47 @@ internal sealed class GameRenderer
             new Color(190, 190, 180, 255));
     }
 
-    private static void DrawHud(Vehicle vehicle)
+    private void DrawHud(Vehicle vehicle)
     {
         float speedKilometersPerHour = vehicle.SpeedMetersPerSecond * 3.6f;
         VehicleDiagnostics state = vehicle.Diagnostics;
         string gear = state.CurrentGear < 0 ? "R" : state.CurrentGear.ToString();
-        string abs = state.AnyAbsIntervention ? "ACTIVE" : "ready";
+        const int bottomBarHeight = 72;
+        int bottomBarY = screenHeight - bottomBarHeight;
+        Raylib.DrawRectangle(0, bottomBarY, screenWidth, bottomBarHeight, new Color(10, 14, 13, 178));
 
-        Raylib.DrawRectangle(18, 18, 650, 188, new Color(12, 16, 14, 210));
-        Raylib.DrawText($"{vehicle.Definition.Name}  |  FWD", 34, 30, 22, Color.RayWhite);
-        string controls = vehicle.IsExploded
-            ? "WASD / ARROWS Pan Camera   WHEEL Zoom   R Reset"
-            : "WASD / ARROWS Drive   WHEEL Zoom   SPACE Explode   R Reset";
-        Raylib.DrawText(controls, 34, 60, 18, Color.LightGray);
-        if (vehicle.IsExploded)
+        string primaryStatus =
+            $"Speed {speedKilometersPerHour:0} km/h     Gear {gear}     RPM {state.EngineRevolutionsPerMinute:0}     Damage {vehicle.DamagePercent:0}%";
+        const int primaryFontSize = 24;
+        int primaryX = (screenWidth - Raylib.MeasureText(primaryStatus, primaryFontSize)) / 2;
+        int primaryY = bottomBarY + (vehicle.IsExploded || vehicle.IsSunk || vehicle.IsDisabled ? 10 : 23);
+        Color damageColor = vehicle.DamagePercent >= 75.0f ? Color.Orange : Color.RayWhite;
+        Raylib.DrawText(primaryStatus, primaryX, primaryY, primaryFontSize, damageColor);
+
+        string? condition = vehicle.IsExploded
+            ? "EXPLODED — R Reset"
+            : vehicle.IsSunk
+                ? "SUNK IN DEEP WATER — R Reset"
+                : vehicle.IsDisabled
+                    ? "VEHICLE DISABLED — Space Detonator / R Reset"
+                    : null;
+        if (condition is not null)
         {
-            Raylib.DrawText("EXPLODED    Press R to reset", 34, 92, 24, Color.Orange);
-            return;
+            const int conditionFontSize = 18;
+            int conditionX = (screenWidth - Raylib.MeasureText(condition, conditionFontSize)) / 2;
+            Color conditionColor = vehicle.IsSunk ? new Color(107, 190, 222, 255) : Color.Orange;
+            Raylib.DrawText(condition, conditionX, bottomBarY + 42, conditionFontSize, conditionColor);
         }
-        if (vehicle.IsSunk)
-        {
-            Raylib.DrawText("SUNK IN DEEP WATER    Press R to reset", 34, 92, 24, new Color(107, 190, 222, 255));
-            return;
-        }
-        Raylib.DrawText(
-            $"Speed  {speedKilometersPerHour,5:0} km/h    Gear {gear}    RPM {state.EngineRevolutionsPerMinute,4:0}",
-            34,
-            88,
-            24,
-            Color.Gold);
-        Raylib.DrawText(
-            $"ABS {abs}    Shift {state.ShiftState}",
-            34,
-            124,
-            17,
-            state.AnyAbsIntervention ? Color.Orange : Color.LightGray);
-        Raylib.DrawText(
-            WheelSummary("FL", state.Wheels.FrontLeft) + "   " + WheelSummary("FR", state.Wheels.FrontRight),
-            34,
-            152,
-            17,
-            Color.LightGray);
-        Raylib.DrawText(
-            WheelSummary("RL", state.Wheels.RearLeft) + "   " + WheelSummary("RR", state.Wheels.RearRight),
-            34,
-            178,
-            17,
-            Color.LightGray);
+
+        const int sidebarWidth = 222;
+        const int sidebarHeight = 140;
+        int sidebarX = screenWidth - sidebarWidth - 18;
+        const int sidebarY = 18;
+        Raylib.DrawRectangle(sidebarX, sidebarY, sidebarWidth, sidebarHeight, new Color(10, 14, 13, 168));
+        Raylib.DrawText("CONTROLS", sidebarX + 16, sidebarY + 14, 19, Color.RayWhite);
+        Raylib.DrawText("WASD / Arrows   Drive", sidebarX + 16, sidebarY + 44, 17, Color.LightGray);
+        Raylib.DrawText("Mouse-wheel   Zoom", sidebarX + 16, sidebarY + 68, 17, Color.LightGray);
+        Raylib.DrawText("Space   Detonator", sidebarX + 16, sidebarY + 92, 17, Color.LightGray);
+        Raylib.DrawText("R   Reset", sidebarX + 16, sidebarY + 116, 17, Color.LightGray);
     }
-
-    private static string WheelSummary(string name, WheelDiagnostics wheel) =>
-        $"{name} {wheel.NormalLoadNewtons / 1_000.0f:0.0}kN {wheel.GripUsage * 100.0f:0}%" +
-        (wheel.AbsIntervening ? " ABS" : string.Empty);
 }

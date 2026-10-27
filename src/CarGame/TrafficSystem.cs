@@ -46,6 +46,7 @@ internal sealed class TrafficVehicle
     }
 
     public ColorRgb Color { get; }
+    internal B2BodyId BodyId => bodyId;
     public bool IsActive { get; private set; }
     public bool IsWrecked { get; private set; }
     public bool IsDisabled { get; private set; }

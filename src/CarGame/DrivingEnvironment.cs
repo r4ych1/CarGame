@@ -69,6 +69,7 @@ internal sealed class PhysicsProp
     }
 
     public PhysicsPropKind Kind { get; }
+    internal B2BodyId BodyId => bodyId;
     public Vector2 SizeMeters { get; }
     public bool IsAnchored { get; }
     public float MassKilograms => b2Body_GetMass(bodyId);
@@ -323,8 +324,8 @@ internal sealed class DrivingEnvironment
         this.worldId = worldId;
         CreateBoundaries();
         CreateTownWalls();
-        CreatePedestrianPanicBarriers();
         Build();
+        RefreshPedestrianPanicBarriers();
         BuildProps();
         BuildCharacters();
         Traffic = new TrafficSystem(worldId);
@@ -336,6 +337,7 @@ internal sealed class DrivingEnvironment
     public IReadOnlyList<BlastVisualEffect> BlastEffects => blastEffects;
     public IReadOnlyList<PhysicsProp> Props => props;
     public IReadOnlyList<WallSegment> TownWalls => townWalls;
+    internal IReadOnlyList<WallSegment> PedestrianPanicBarriers => pedestrianPanicBarriers;
     public IReadOnlyList<AmbientCharacter> Characters => characters;
     public IReadOnlyList<GuardRound> GuardRounds => guardRounds;
     public static IReadOnlyList<Vector2> DirtRoadPointsMeters => dirtRoadPointsMeters;
@@ -500,6 +502,8 @@ internal sealed class DrivingEnvironment
                 debris.Add(new(worldId, item.Kind, position, fragmentSize, item.RotationRadians, fragmentDirection * speed, spin));
             }
         }
+
+        RefreshPedestrianPanicBarriers();
     }
 
     private void UpdateCharacterFear()
@@ -612,6 +616,10 @@ internal sealed class DrivingEnvironment
                 vehicleRotation,
                 vehicleSize,
                 shotObstacles);
+            if (playerVehicle is not null && round.ConsumeVehicleImpact())
+            {
+                playerVehicle.ApplyGuardRoundDamage();
+            }
             if (round.IsExpired)
             {
                 guardRounds.RemoveAt(index);
@@ -640,6 +648,21 @@ internal sealed class DrivingEnvironment
         }
 
         return true;
+    }
+
+    internal bool CausesPlayerCollisionDamage(B2BodyId bodyId)
+    {
+        foreach (SceneryObject item in scenery)
+        {
+            if (item.HasBody && item.BodyId == bodyId &&
+                item.Kind is SceneryKind.Building or SceneryKind.Shack or
+                    SceneryKind.ParkedCar or SceneryKind.ParkedTruck)
+            {
+                return true;
+            }
+        }
+
+        return Traffic.Vehicles.Any(vehicle => vehicle.BodyId == bodyId);
     }
 
     private IReadOnlyList<ShotObstacle> BuildShotObstacles()
@@ -743,7 +766,11 @@ internal sealed class DrivingEnvironment
         foreach (WorldDebris item in debris) item.Destroy();
         foreach (PhysicsProp prop in props) prop.Destroy();
         foreach (AmbientCharacter character in characters) character.Destroy();
-        scenery.Clear(); debris.Clear(); craters.Clear(); blastEffects.Clear(); props.Clear(); characters.Clear(); guardRounds.Clear(); Build(); BuildProps(); BuildCharacters();
+        scenery.Clear(); debris.Clear(); craters.Clear(); blastEffects.Clear(); props.Clear(); characters.Clear(); guardRounds.Clear();
+        Build();
+        RefreshPedestrianPanicBarriers();
+        BuildProps();
+        BuildCharacters();
         WaterFlowAgeSeconds = 0.0f;
         Traffic.Reset();
     }
@@ -927,9 +954,18 @@ internal sealed class DrivingEnvironment
             new(TownMaximumMeters.X - entranceRight, thickness));
     }
 
-    private void CreatePedestrianPanicBarriers()
+    private void RefreshPedestrianPanicBarriers()
     {
+        pedestrianPanicBarriers.Clear();
         pedestrianPanicBarriers.AddRange(townWalls);
+        foreach (SceneryObject item in scenery)
+        {
+            if (!item.IsDestroyed && item.Kind is SceneryKind.Building or SceneryKind.Shack)
+            {
+                pedestrianPanicBarriers.Add(new(item.PositionMeters, item.SizeMeters));
+            }
+        }
+
         const float bankBarrierThicknessMeters = 1.0f;
         float bridgeLeft = BridgeCenterXMeters - BridgeWidthMeters * 0.5f;
         float bridgeRight = BridgeCenterXMeters + BridgeWidthMeters * 0.5f;

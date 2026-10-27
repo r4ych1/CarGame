@@ -20,6 +20,8 @@ code-drawn people with lightweight movement and collision behavior.
 - The living top-down sprite uses a compact rectangular torso with its head
   centered over its forward end. Arms and legs swing forward and backward along
   the facing direction with opposing walking phases.
+- A guard's circular head is centered directly on the center of the rectangular
+  torso so the soldier reads as a compact top-down unit.
 - A compact, soft shadow is cast slightly down and right from each living person
   by the same implied upper-left light source used for cars and scenery. Its
   short offset keeps the figure visually grounded rather than floating.
@@ -51,8 +53,9 @@ code-drawn people with lightweight movement and collision behavior.
   chooses a lateral route out of the lane instead of running ahead of the car.
 - Living people within 44 metres of an explosion panic and run away. People
   inside the 32-metre impact radius also receive its physical force.
-- Panicked people look ahead for town walls and steer along a clear side route
-  instead of continuing to run directly into a blocking wall.
+- Panicked people look ahead for town walls, stream banks, and intact buildings
+  or shacks, then steer along a clear side route instead of continuing to run
+  directly into an obstacle.
 
 ## Functional requirements
 
@@ -61,9 +64,9 @@ code-drawn people with lightweight movement and collision behavior.
   their authored paths while idle people hold their positions.
 - Vehicle, explosion, and corpse panic temporarily override authored movement
   with a flee direction; characters return to their authored activity afterward.
-- Panic steering tests the intended route against expanded town-wall bounds and
-  deterministically selects a clear angled route when the direct route is
-  blocked.
+- Panic steering tests the intended route against expanded town-wall, stream-bank,
+  and intact-building bounds and deterministically selects a clear angled route
+  when the direct route is blocked. Destroyed buildings no longer block a route.
 - Stream-bank segments participate in panic route avoidance while leaving the
   bridge opening clear. A post-physics position constraint returns any living
   person displaced into the stream to the nearest bank without affecting travel
@@ -95,6 +98,7 @@ code-drawn people with lightweight movement and collision behavior.
   half of a 4.2-metre traffic car.
 - The head is centered across the torso rectangle, and walking limb swings
   follow the character's direction of travel.
+- Every living guard's head circle is centered on its torso rectangle.
 - The living-person shadow follows the shared scene-light direction with a
   shorter offset than vehicle and building shadows.
 - People remain within their authored paths while alive and stay inside the
@@ -116,8 +120,9 @@ code-drawn people with lightweight movement and collision behavior.
   10 metres flee, and people within 44 metres of an explosion panic. Fleeing
   works for idle and walking people. Vehicle-triggered flee direction is lateral
   to the vehicle's travel rather than ahead of it.
-- A panicked person's selected direction does not intersect a town wall within
-  the five-metre look-ahead distance when a clear angled route is available.
+- A panicked person's selected direction does not intersect a town wall, stream
+  bank, or intact building within the five-metre look-ahead distance when a clear
+  angled route is available. Destroying a building removes its navigation bound.
 - Walk speed is about 1.5 to 2.3 m/s and panic speed is about 8 m/s.
 - Car impacts trigger a brief physical knock, then disable collision after 0.22
   seconds and leave a flattened body with a persistent blood pool so the car can
@@ -139,7 +144,9 @@ code-drawn people with lightweight movement and collision behavior.
 5. Approach a person with the car and confirm they flee sideways out of its path
    rather than running ahead of it.
 6. Explode near a group and confirm nearby survivors run away at a clear sprint;
-   people nearing town walls should turn and continue along a clear route.
+   people nearing town walls or buildings should turn and continue along a clear
+   route. Confirm a destroyed building no longer causes people to detour around
+   its former footprint.
    Confirm anyone fleeing near the stream follows its bank or crosses the bridge
    rather than entering the water.
 7. Confirm people within 10 metres break apart, but their limbs settle much
@@ -153,8 +160,8 @@ code-drawn people with lightweight movement and collision behavior.
 ## Non-goals
 
 - Dialogue, schedules, tasks, general-purpose pathfinding beyond short-range
-  panic wall avoidance and authored loops, or persistent person state between
-  resets.
+  panic obstacle avoidance and authored loops, or persistent person state
+  between resets.
 
 ## Open decisions
 

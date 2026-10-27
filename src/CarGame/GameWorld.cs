@@ -1,4 +1,5 @@
 using Box2D.NET;
+using static Box2D.NET.B2Shapes;
 using static Box2D.NET.B2Types;
 using static Box2D.NET.B2Worlds;
 
@@ -31,6 +32,7 @@ internal sealed class GameWorld : IDisposable
         }
         Environment.Step(fixedTimeStep, Vehicle);
         b2World_Step(worldId, fixedTimeStep, subSteps);
+        ApplyVehicleCollisionDamage();
         Environment.PostPhysicsStep(Vehicle);
     }
 
@@ -46,6 +48,40 @@ internal sealed class GameWorld : IDisposable
         {
             Environment.Explode(Vehicle.PositionMeters);
             Vehicle.Explode();
+        }
+    }
+
+    private void ApplyVehicleCollisionDamage()
+    {
+        if (Vehicle.IsExploded || Vehicle.IsSunk)
+        {
+            return;
+        }
+
+        B2ContactEvents contactEvents = b2World_GetContactEvents(worldId);
+        for (int index = 0; index < contactEvents.hitCount; index++)
+        {
+            B2ContactHitEvent hit = contactEvents.hitEvents[index];
+            B2BodyId bodyA = b2Shape_GetBody(hit.shapeIdA);
+            B2BodyId bodyB = b2Shape_GetBody(hit.shapeIdB);
+            B2BodyId otherBody;
+            if (Vehicle.BodyId == bodyA)
+            {
+                otherBody = bodyB;
+            }
+            else if (Vehicle.BodyId == bodyB)
+            {
+                otherBody = bodyA;
+            }
+            else
+            {
+                continue;
+            }
+
+            if (Environment.CausesPlayerCollisionDamage(otherBody))
+            {
+                Vehicle.ApplyCollisionDamage(hit.approachSpeed);
+            }
         }
     }
 

@@ -49,7 +49,8 @@ provides scenery, collision, and deterministic blast destruction.
 - A visible solid perimeter encloses the complete environment and prevents the
   vehicle or dynamic debris from leaving the playable area.
 - The mouse wheel zooms the camera in and out while preserving its current
-  target. Zoom is clamped between 0.35x and 2.5x.
+  target. Zoom is clamped between 0.35x and 1.65x so the closest view retains
+  more surrounding context.
 
 ## Functional requirements
 

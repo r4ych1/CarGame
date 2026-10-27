@@ -21,7 +21,8 @@ outward explosion impulse.
 - Pressing Space again while exploded has no effect.
 - Pressing R removes every explosion piece and restores the intact car at its
   initial pose and simulation state.
-- The HUD identifies Space as the explode control and reports the exploded state.
+- The controls sidebar identifies Space as the detonator and the bottom status
+  bar reports the exploded state.
 - Detonation produces a bright central flash and fireball, an expanding
   concussion ring that reaches the 32-metre world blast radius, radial debris
   streaks, numerous smoke plumes distributed through the blast area, and a large
@@ -141,8 +142,8 @@ outward explosion impulse.
 
 ## Non-goals
 
-- Sound, damage accumulation, collision-triggered destruction,
-  fragment-to-fragment joints, or secondary explosions.
+- Sound, collision-triggered or automatic destruction, fragment-to-fragment
+  joints, or secondary explosions.
 - Three-dimensional ballistics, vertical gravity, terrain interaction, injury,
   or manufacturer-accurate crash deformation.
 - Randomized debris, persistent wreckage, repair gameplay, or camera shake.
