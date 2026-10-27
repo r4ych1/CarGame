@@ -1,4 +1,3 @@
-using System.Numerics;
 using Box2D.NET;
 using static Box2D.NET.B2Types;
 using static Box2D.NET.B2Worlds;
@@ -30,8 +29,7 @@ internal sealed class GameWorld : IDisposable
         {
             Vehicle.Sink();
         }
-        Vector2? playerObstacle = Vehicle.IsExploded ? null : Vehicle.PositionMeters;
-        Environment.Step(fixedTimeStep, playerObstacle);
+        Environment.Step(fixedTimeStep, Vehicle);
         b2World_Step(worldId, fixedTimeStep, subSteps);
         Environment.PostPhysicsStep(Vehicle);
     }

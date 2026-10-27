@@ -26,9 +26,10 @@ outward explosion impulse.
   concussion ring that reaches the 32-metre world blast radius, radial debris
   streaks, numerous smoke plumes distributed through the blast area, and a large
   dense ground-level smoke plume centered on the blast point.
-- The explosion's close-range deadly zone is 16 metres; its physical impact
-  radius remains 32 metres. People and buildings in the outer band are pushed
-  or cracked respectively without being killed or destroyed.
+- The explosion's close-range deadly zone for people is 20 metres; its structural
+  destruction radius remains 16 metres and its physical impact radius remains
+  32 metres. People in the outer impact band are thrown without being killed,
+  while buildings beyond the structural radius are cracked rather than destroyed.
 
 ## Functional requirements
 

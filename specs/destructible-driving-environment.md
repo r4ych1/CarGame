@@ -12,7 +12,8 @@ provides scenery, collision, and deterministic blast destruction.
   parked cars and trucks. A horizontal stream crosses the complete map and the
   main road crosses it on one bridge. Town buildings form rows around streets.
 - Buildings have distinct code-drawn roofs with visible roof edges and surface
-  details.
+  details. Buildings, vegetation, parked vehicles, and movable roadside objects
+  have subtle ground shadows that add depth without looking detached.
 - A solid wall encloses every town building and its rows. The wall has one
   8-metre-wide entrance aligned with the approaching main road on its southern
   side, blocked by one movable guardrail section.
@@ -30,10 +31,10 @@ provides scenery, collision, and deterministic blast destruction.
   sinks the player car. A sunk car stops moving and ignores driving controls
   until R resets the world. It also cannot explode: Space creates no vehicle
   fragments, blast effects, crater, or environment damage while sunk.
-- The car explosion has a 32-metre physical impact radius and a 16-metre deadly
+- The car explosion has a 32-metre physical impact radius and a 16-metre building
   destruction radius. Buildings inside 16 metres split into charred rigid debris
   that settles as rubble; buildings from 16 to 32 metres remain standing with
-  visible cracks. People inside 16 metres are killed, while people farther out
+  visible cracks. People inside 20 metres are killed, while people farther out
   are knocked back by physics and survive. Other destructible scenery still
   reacts throughout the 32-metre impact radius. Building fragments look like
   scorched chunks rather than miniature intact roofs, with irregular sizes and
@@ -54,6 +55,8 @@ provides scenery, collision, and deterministic blast destruction.
 
 - World layout is handcrafted and deterministic, measured in metres, and
   contains no image assets.
+- Bush placement tests the complete bush footprint against the paved main road,
+  dirt bypass, bridge roadway, and town cross streets; no bush overlaps any road.
 - Static colliders exist for intact solid props. Destruction removes each
   affected collider before creating dynamic debris bodies.
 - Town walls are permanent static colliders and are immune to explosions.
@@ -87,9 +90,9 @@ provides scenery, collision, and deterministic blast destruction.
 - The approximately 5-metre-wide dirt bypass stays east of both checkpoint
   barriers and reconnects before the town entrance.
 - Intact solid objects collide with the vehicle.
-- People and buildings inside 16 metres are killed or destroyed respectively;
+- People inside 20 metres are killed, while buildings inside 16 metres are destroyed;
   buildings in the 16-to-32-metre band stay standing and show cracks, and people
-  in that band are pushed back and survive.
+  in the 20-to-32-metre band are pushed back and survive.
 - Other blast-reactive objects inside 32 metres receive an outward physical
   impact; objects outside remain unaffected.
 - Destroyed buildings produce multiple independently simulated pieces, trees
@@ -119,7 +122,10 @@ provides scenery, collision, and deterministic blast destruction.
   and guarded town entrance.
 - Curved road segments use filled full-width joins, so outward bend edges have
   no triangular ground gaps between sampled sections.
-- Bushes remain beyond the paved road edge and shoulder.
+- Bushes remain completely beyond every paved or dirt road edge and shoulder.
+- Intact buildings, vegetation, parked vehicles, and movable props have subtle,
+  consistently directed code-drawn shadows cast down and right from an implied
+  upper-left light source. Taller scenery casts a slightly longer shadow.
 - Trees and bushes are excluded from the stream and its immediate banks. Short,
   translucent current streaks drift horizontally across the water on the fixed
   timestep to show a gentle flow.
@@ -130,7 +136,8 @@ provides scenery, collision, and deterministic blast destruction.
 1. Drive along the curved road, across the stream bridge, and toward the town.
    Confirm both edges remain visually continuous around every bend.
 2. Confirm trees, rocks, and buildings block the car while bushes do not.
-   Confirm building roofs have visible shape and surface details.
+   Confirm building roofs have visible shape and surface details, and scenery
+   and props have subtle shadows that remain visually attached to them.
 3. Zigzag through the two checkpoint barriers, then push or blast the town
    entrance guardrail aside, and
    confirm the remaining wall has no other opening.
@@ -151,6 +158,8 @@ provides scenery, collision, and deterministic blast destruction.
     sinks, stops responding, cannot explode with Space, and is restored by R.
 12. Confirm bridge guardrails line both water-facing edges and stop cars from
     leaving the bridge, while traffic cones move readily when struck.
+13. Inspect the main road, bridge, dirt bypass, and town streets and confirm no
+    bush overlaps a road surface or shoulder.
 
 ## Non-goals
 

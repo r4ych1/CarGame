@@ -11,6 +11,7 @@ internal sealed class GameRenderer
     private const float MaximumZoom = 2.5f;
     private const float ZoomStep = 1.12f;
     private const float ExplodedCameraSpeedMetersPerSecond = 28.0f;
+    private static readonly Vector2 GroundShadowDirection = Vector2.Normalize(new Vector2(0.65f, 1.0f));
     private readonly Vector2 screenCenter;
     private Vector2 cameraTarget;
     private bool wasExploded;
@@ -45,6 +46,7 @@ internal sealed class GameRenderer
         {
             DrawVehicle(vehicle);
         }
+        DrawGuardRounds(world.Environment.GuardRounds);
         Raylib.EndMode2D();
         DrawHud(vehicle);
         Raylib.EndDrawing();
@@ -249,7 +251,7 @@ internal sealed class GameRenderer
         Color clothing = ToRaylibColor(character.ClothingColor);
         Color skin = ToRaylibColor(character.SkinColor);
         Color trouser = new(54, 57, 61, 255);
-        Vector2 shadowOffset = new(0.18f * figureScale, 0.22f * figureScale);
+        Vector2 shadowOffset = GroundShadowDirection * (0.15f * scale);
         Vector2 torsoSize = new(0.28f * figureScale, 0.38f * figureScale);
         float rotationDegrees = (character.FacingRadians * 180.0f / MathF.PI) - 90.0f;
 
@@ -323,6 +325,70 @@ internal sealed class GameRenderer
         Raylib.DrawCircleV(headCenter, 0.12f * figureScale, new Color(62, 45, 37, 255));
         Raylib.DrawCircleV(headCenter, 0.085f * figureScale, skin);
         Raylib.DrawCircleV(headCenter - side * (0.03f * figureScale) - forward * (0.025f * figureScale), 0.028f * figureScale, new Color(255, 225, 198, 225));
+        if (character.Role == CharacterRole.Guard)
+        {
+            DrawGuardEquipment(character, center, headCenter, forward, side, figureScale);
+        }
+    }
+
+    private static void DrawGuardEquipment(
+        AmbientCharacter character,
+        Vector2 center,
+        Vector2 headCenter,
+        Vector2 forward,
+        Vector2 side,
+        float figureScale)
+    {
+        Color rifleColor = new(40, 43, 38, 255);
+        Vector2 rifleRear = center - forward * (0.18f * figureScale) + side * (0.16f * figureScale);
+        Vector2 rifleFront = center + forward * (0.58f * figureScale) + side * (0.16f * figureScale);
+        Raylib.DrawLineEx(rifleRear, rifleFront, 0.075f * figureScale, rifleColor);
+        Raylib.DrawLineEx(
+            center + side * (0.16f * figureScale),
+            center + forward * (0.12f * figureScale) - side * (0.04f * figureScale),
+            0.045f * figureScale,
+            new Color(104, 76, 48, 255));
+        Raylib.DrawCircleV(headCenter - forward * (0.015f * figureScale), 0.13f * figureScale, new Color(55, 70, 43, 255));
+        Raylib.DrawLineEx(
+            headCenter - side * (0.13f * figureScale),
+            headCenter + side * (0.13f * figureScale),
+            0.035f * figureScale,
+            new Color(35, 44, 31, 255));
+
+        if (character.MuzzleFlashAgeSeconds > 0.0f)
+        {
+            Raylib.DrawCircleV(rifleFront, 0.12f * figureScale, new Color(255, 229, 112, 235));
+            Raylib.DrawCircleV(rifleFront + forward * (0.10f * figureScale), 0.065f * figureScale, new Color(255, 151, 53, 245));
+        }
+    }
+
+    private static void DrawGuardRounds(IReadOnlyList<GuardRound> rounds)
+    {
+        float scale = SimulationUnits.PixelsPerMeter;
+        foreach (GuardRound round in rounds)
+        {
+            Vector2 position = round.PositionMeters * scale;
+            if (round.HasImpacted)
+            {
+                const float sparkRadiusMeters = 0.34f;
+                for (int ray = 0; ray < 4; ray++)
+                {
+                    float angle = ray * MathF.PI * 0.5f + MathF.PI * 0.25f;
+                    Vector2 offset = new(MathF.Cos(angle), MathF.Sin(angle));
+                    Raylib.DrawLineEx(
+                        position,
+                        position + offset * sparkRadiusMeters * scale,
+                        0.07f * scale,
+                        new Color(255, 205, 83, 235));
+                }
+                continue;
+            }
+
+            Vector2 velocityDirection = Vector2.Normalize(round.VelocityMetersPerSecond);
+            Vector2 trailStart = round.PreviousPositionMeters * scale - velocityDirection * (0.32f * scale);
+            Raylib.DrawLineEx(trailStart, position, 0.09f * scale, new Color(255, 226, 132, 230));
+            Raylib.DrawCircleV(position, 0.07f * scale, new Color(255, 248, 205, 255));
+        }
     }
 
     private static void DrawCharacterLimb(CharacterLimb limb, float scale)
@@ -449,11 +515,13 @@ internal sealed class GameRenderer
         Color bodyColor = vehicle.IsWrecked
             ? new Color(72, 70, 66, 255)
             : new Color((int)rgb.Red, (int)rgb.Green, (int)rgb.Blue, 255);
-        Raylib.DrawRectanglePro(
-            new Rectangle(center.X + 2.0f, center.Y + 2.0f, size.X, size.Y),
-            size * 0.5f,
+        DrawRectangularGroundShadow(
+            center,
+            size,
             rotation,
-            new Color(24, 28, 27, 150));
+            GroundShadowDirection * (0.20f * scale),
+            1.10f,
+            92);
         Raylib.DrawRectanglePro(
             new Rectangle(center.X, center.Y, size.X, size.Y),
             size * 0.5f,
@@ -550,6 +618,25 @@ internal sealed class GameRenderer
         Vector2 center = prop.PositionMeters * scale;
         Vector2 size = prop.SizeMeters * scale;
         float rotation = prop.RotationRadians * 180.0f / MathF.PI;
+        if (prop.Kind == PhysicsPropKind.TrafficCone)
+        {
+            Raylib.DrawEllipse(
+                (int)(center.X + GroundShadowDirection.X * 0.10f * scale),
+                (int)(center.Y + GroundShadowDirection.Y * 0.10f * scale),
+                size.X * 0.56f,
+                size.Y * 0.38f,
+                new Color(22, 25, 23, 60));
+        }
+        else
+        {
+            DrawRectangularGroundShadow(
+                center,
+                size,
+                rotation,
+                GroundShadowDirection * (0.12f * scale),
+                1.07f,
+                62);
+        }
         switch (prop.Kind)
         {
             case PhysicsPropKind.TrafficCone:
@@ -713,13 +800,28 @@ internal sealed class GameRenderer
         float scale = SimulationUnits.PixelsPerMeter;
         Vector2 center = item.PositionMeters * scale;
         Vector2 trunkSize = new(0.65f * scale, 5.5f * scale);
+        float rotationDegrees = item.RotationRadians * 180.0f / MathF.PI;
+        Vector2 canopyCenter = center +
+            VehicleMath.Forward(item.RotationRadians) * trunkSize.Y * 0.44f;
+        DrawRectangularGroundShadow(
+            center,
+            trunkSize,
+            rotationDegrees,
+            GroundShadowDirection * (0.14f * scale),
+            1.05f,
+            58);
+        Vector2 canopyShadowCenter = canopyCenter + GroundShadowDirection * (0.22f * scale);
+        Raylib.DrawEllipse(
+            (int)canopyShadowCenter.X,
+            (int)canopyShadowCenter.Y,
+            1.25f * scale,
+            0.82f * scale,
+            new Color(20, 24, 21, 58));
         Raylib.DrawRectanglePro(
             new Rectangle(center.X, center.Y, trunkSize.X, trunkSize.Y),
             trunkSize * 0.5f,
-            item.RotationRadians * 180.0f / MathF.PI,
+            rotationDegrees,
             new Color(91, 62, 38, 255));
-        Vector2 canopyCenter = center +
-            VehicleMath.Forward(item.RotationRadians) * trunkSize.Y * 0.44f;
         Raylib.DrawCircleV(canopyCenter, 1.2f * scale, new Color(35, 91, 43, 255));
     }
 
@@ -820,10 +922,37 @@ internal sealed class GameRenderer
         if (kind is SceneryKind.Tree or SceneryKind.Bush)
         {
             Color color = kind == SceneryKind.Tree ? new(35, 91, 43, 255) : new(53, 117, 57, 255);
-            Raylib.DrawCircleV(center, sizeMeters.X * scale * 0.65f, color);
+            float foliageRadius = sizeMeters.X * scale * 0.65f;
+            float foliageShadowLengthMeters = kind == SceneryKind.Tree ? 0.30f : 0.14f;
+            Vector2 foliageShadowCenter = center +
+                GroundShadowDirection * foliageShadowLengthMeters * scale;
+            Raylib.DrawEllipse(
+                (int)foliageShadowCenter.X,
+                (int)foliageShadowCenter.Y,
+                foliageRadius * 1.04f,
+                foliageRadius * 0.72f,
+                new Color(21, 27, 22, kind == SceneryKind.Tree ? 70 : 50));
+            Raylib.DrawCircleV(center, foliageRadius, color);
             if (kind == SceneryKind.Tree) Raylib.DrawCircleV(center, sizeMeters.X * scale * 0.20f, new Color(91, 62, 38, 255));
             return;
         }
+        Vector2 size = sizeMeters * scale;
+        float rotationDegrees = rotation * 180.0f / MathF.PI;
+        byte shadowAlpha = kind is SceneryKind.Building or SceneryKind.Shack ? (byte)72 : (byte)64;
+        float shadowExpansion = kind is SceneryKind.ParkedCar or SceneryKind.ParkedTruck ? 1.08f : 1.04f;
+        float shadowLengthMeters = kind switch
+        {
+            SceneryKind.Building or SceneryKind.Shack => 0.34f,
+            SceneryKind.ParkedCar or SceneryKind.ParkedTruck => 0.20f,
+            _ => 0.14f,
+        };
+        DrawRectangularGroundShadow(
+            center,
+            size,
+            rotationDegrees,
+            GroundShadowDirection * shadowLengthMeters * scale,
+            shadowExpansion,
+            shadowAlpha);
         Color fill = kind switch
         {
             SceneryKind.Building => new(177, 157, 126, 255),
@@ -832,7 +961,7 @@ internal sealed class GameRenderer
             SceneryKind.ParkedTruck => new(142, 137, 119, 255),
             _ => new(104, 105, 99, 255),
         };
-        Raylib.DrawRectanglePro(new Rectangle(center.X, center.Y, sizeMeters.X * scale, sizeMeters.Y * scale), sizeMeters * scale * 0.5f, rotation * 180.0f / MathF.PI, fill);
+        Raylib.DrawRectanglePro(new Rectangle(center.X, center.Y, size.X, size.Y), size * 0.5f, rotationDegrees, fill);
         if (kind == SceneryKind.Building)
         {
             DrawBuildingRoof(center, sizeMeters, positionMeters, scale, rotation);
@@ -928,6 +1057,23 @@ internal sealed class GameRenderer
             offset.X * MathF.Sin(radians) + offset.Y * MathF.Cos(radians));
     }
 
+    private static void DrawRectangularGroundShadow(
+        Vector2 center,
+        Vector2 size,
+        float rotationDegrees,
+        Vector2 shadowOffset,
+        float expansion,
+        byte alpha)
+    {
+        Vector2 shadowSize = size * expansion;
+        Vector2 shadowCenter = center + shadowOffset;
+        Raylib.DrawRectanglePro(
+            new Rectangle(shadowCenter.X, shadowCenter.Y, shadowSize.X, shadowSize.Y),
+            shadowSize * 0.5f,
+            rotationDegrees,
+            new Color(19, 23, 21, (int)alpha));
+    }
+
     private static void DrawExplosionPieces(IReadOnlyList<ExplosionPiece> pieces)
     {
         foreach (ExplosionPiece piece in pieces)
@@ -943,6 +1089,13 @@ internal sealed class GameRenderer
                 ExplosionPieceKind.MiscellaneousDebris => new Color(112, 73, 49, 255),
                 _ => new Color(190, 55, 46, 255),
             };
+            DrawRectangularGroundShadow(
+                piece.Position,
+                new Vector2(width, length),
+                rotationDegrees,
+                GroundShadowDirection * (0.12f * SimulationUnits.PixelsPerMeter),
+                1.06f,
+                58);
             Raylib.DrawRectanglePro(
                 new Rectangle(piece.Position.X, piece.Position.Y, width, length),
                 new Vector2(width / 2.0f, length / 2.0f),
@@ -991,12 +1144,14 @@ internal sealed class GameRenderer
         Vector2 windshieldCenter = visualCenter +
             (VehicleMath.Forward(vehicle.RotationRadians) * length * 0.17f);
 
-        DrawWheels(vehicle, rotationDegrees);
-        Raylib.DrawRectanglePro(
-            new Rectangle(vehicle.Position.X + 2.0f, vehicle.Position.Y + 2.0f, width, length),
-            origin,
+        DrawRectangularGroundShadow(
+            vehicle.Position,
+            new Vector2(width, length),
             rotationDegrees,
-            new Color(91, 38, 34, 180));
+            GroundShadowDirection * (0.20f * SimulationUnits.PixelsPerMeter),
+            1.11f,
+            96);
+        DrawWheels(vehicle, rotationDegrees);
         Raylib.DrawRectanglePro(body, origin, rotationDegrees,
             vehicle.IsSunk ? new Color(91, 103, 101, 255) : new Color(218, 69, 57, 255));
         Raylib.DrawRectanglePro(

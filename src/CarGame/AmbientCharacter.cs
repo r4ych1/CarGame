@@ -16,6 +16,12 @@ internal enum CharacterActivity
     Walking,
 }
 
+internal enum CharacterRole
+{
+    Resident,
+    Guard,
+}
+
 internal enum CharacterLimbKind
 {
     Torso,
@@ -142,6 +148,9 @@ internal sealed class AmbientCharacter
     private const float CharacterBodyHalfLengthMeters = 0.44f;
     private const float PanicLookAheadMeters = 5.0f;
     private const float PanicWallClearanceMeters = 0.65f;
+    private const float GuardInvestigationSpeedMetersPerSecond = 5.5f;
+    private const float GuardInvestigationStandoffMeters = 8.0f;
+    private const float GuardShotIntervalSeconds = 0.9f;
     internal const float LimbBurstRadiusMeters = 10.0f;
     private const float MinimumLimbLaunchSpeedMetersPerSecond = 5.0f;
     private const float MaximumLimbLaunchSpeedMetersPerSecond = 14.0f;
@@ -154,6 +163,7 @@ internal sealed class AmbientCharacter
     private readonly float animationOffset;
     private readonly Vector2 homePositionMeters;
     private readonly float initialHeadingRadians;
+    private readonly bool guardPatrolsAtPost;
     private int currentSegmentIndex;
     private float distanceIntoCurrentSegmentMeters;
     private bool bodyDisabled;
@@ -163,6 +173,11 @@ internal sealed class AmbientCharacter
     private float knockedDownTimerSeconds;
     private float knockedDownAgeSeconds;
     private bool knockedDownBodyDisabled;
+    private Vector2 investigationTargetMeters;
+    private bool isInvestigating;
+    private bool isAggroed;
+    private bool isReturningToPost;
+    private float guardShotCooldownSeconds;
 
     public AmbientCharacter(
         B2WorldId worldId,
@@ -173,7 +188,9 @@ internal sealed class AmbientCharacter
         ColorRgb skinColor,
         float animationOffset,
         float walkSpeedMetersPerSecond = 0.0f,
-        Vector2[]? path = null)
+        Vector2[]? path = null,
+        CharacterRole role = CharacterRole.Resident,
+        bool guardPatrolsAtPost = false)
     {
         this.worldId = worldId;
         Activity = activity;
@@ -185,6 +202,11 @@ internal sealed class AmbientCharacter
         this.animationOffset = animationOffset;
         this.walkSpeedMetersPerSecond = walkSpeedMetersPerSecond;
         this.path = path ?? [];
+        Role = role;
+        this.guardPatrolsAtPost = guardPatrolsAtPost;
+        guardShotCooldownSeconds = role == CharacterRole.Guard
+            ? 0.25f + animationOffset % 0.55f
+            : 0.0f;
         segmentLengths = new float[this.path.Length];
 
         for (int index = 0; index < this.path.Length; index++)
@@ -213,6 +235,8 @@ internal sealed class AmbientCharacter
     }
 
     public CharacterActivity Activity { get; }
+    public CharacterRole Role { get; }
+    public bool GuardPatrolsAtPost => guardPatrolsAtPost;
     public Vector2 PositionMeters
     {
         get
@@ -236,7 +260,11 @@ internal sealed class AmbientCharacter
     public bool IsDead { get; private set; }
     public bool IsPanicking => panicTimerSeconds > 0.0f;
     public bool IsKnockedDown => knockedDownTimerSeconds > 0.0f;
+    public bool IsInvestigating => isInvestigating;
+    public bool IsAggroed => isAggroed;
+    public bool IsReturningToPost => isReturningToPost;
     public bool HasExplodedIntoLimbs { get; private set; }
+    public float MuzzleFlashAgeSeconds { get; private set; }
     internal bool IsCollisionDisabled => bodyDisabled;
     internal Vector2 PanicDirection => panicDirection;
     internal IReadOnlyList<Vector2> AuthoredPath => path;
@@ -249,6 +277,8 @@ internal sealed class AmbientCharacter
     public void Step(float timeStep, IReadOnlyList<WallSegment>? panicObstacles = null)
     {
         AnimationAgeSeconds += timeStep;
+        MuzzleFlashAgeSeconds = MathF.Max(0.0f, MuzzleFlashAgeSeconds - timeStep);
+        guardShotCooldownSeconds = MathF.Max(0.0f, guardShotCooldownSeconds - timeStep);
         foreach (CharacterLimb limb in limbFragments)
         {
             limb.Step(timeStep);
@@ -329,6 +359,61 @@ internal sealed class AmbientCharacter
             return;
         }
 
+        if (isInvestigating)
+        {
+            Vector2 toTarget = investigationTargetMeters - PositionMeters;
+            float distance = toTarget.Length();
+            Vector2 investigationVelocity = Vector2.Zero;
+            if (distance > GuardInvestigationStandoffMeters && distance > 0.01f)
+            {
+                Vector2 steeringDirection = ChoosePanicDirection(
+                    PositionMeters,
+                    toTarget / distance,
+                    panicObstacles ?? []);
+                investigationVelocity = steeringDirection * GuardInvestigationSpeedMetersPerSecond;
+                FacingRadians = MathF.Atan2(steeringDirection.Y, steeringDirection.X);
+                ApplyMovementForce(investigationVelocity, 10.0f);
+            }
+            else
+            {
+                ApplyGuardPatrol(
+                    investigationTargetMeters,
+                    6.0f,
+                    2.0f,
+                    panicObstacles ?? []);
+            }
+            return;
+        }
+
+        if (isAggroed)
+        {
+            ApplyMovementForce(Vector2.Zero, 6.0f);
+            return;
+        }
+
+        if (isReturningToPost)
+        {
+            Vector2 toPost = homePositionMeters - PositionMeters;
+            if (toPost.LengthSquared() > 0.6f * 0.6f)
+            {
+                Vector2 returnDirection = ChoosePanicDirection(
+                    PositionMeters,
+                    Vector2.Normalize(toPost),
+                    panicObstacles ?? []);
+                FacingRadians = MathF.Atan2(returnDirection.Y, returnDirection.X);
+                ApplyMovementForce(returnDirection * 2.3f, 6.0f);
+                return;
+            }
+
+            isReturningToPost = false;
+        }
+
+        if (Role == CharacterRole.Guard && guardPatrolsAtPost)
+        {
+            ApplyGuardPatrol(homePositionMeters, 2.4f, 1.7f, panicObstacles ?? []);
+            return;
+        }
+
         Vector2 targetPosition = Activity == CharacterActivity.Walking && path.Length > 1
             ? AdvanceAlongPath(walkSpeedMetersPerSecond * timeStep)
             : homePositionMeters;
@@ -392,6 +477,8 @@ internal sealed class AmbientCharacter
 
         knockedDownTimerSeconds = 0.0f;
         IsDead = true;
+        isAggroed = false;
+        isReturningToPost = false;
         DeathAgeSeconds = 0.0f;
         collisionDisableDelaySeconds = DeathReactionDurationSeconds;
         B2Vec2 position = b2Body_GetPosition(bodyId);
@@ -550,6 +637,14 @@ internal sealed class AmbientCharacter
 
     public void ReactToExplosion(Vector2 centerMeters, float panicRadiusMeters)
     {
+        ReactToExplosion(centerMeters, panicRadiusMeters, 0.0f);
+    }
+
+    public void ReactToExplosion(
+        Vector2 centerMeters,
+        float panicRadiusMeters,
+        float damageRadiusMeters)
+    {
         if (IsDead)
         {
             return;
@@ -557,9 +652,112 @@ internal sealed class AmbientCharacter
 
         Vector2 awayFromBlast = PositionMeters - centerMeters;
         float distance = awayFromBlast.Length();
-        if (distance <= panicRadiusMeters)
+        if (Role == CharacterRole.Guard && damageRadiusMeters > 0.0f)
+        {
+            isAggroed = false;
+            isReturningToPost = false;
+            if (distance <= damageRadiusMeters)
+            {
+                BeginPanic(distance > 0.01f ? awayFromBlast / distance : Vector2.UnitX, 8.0f);
+            }
+            else
+            {
+                investigationTargetMeters = centerMeters;
+                isInvestigating = true;
+            }
+        }
+        else if (distance <= panicRadiusMeters)
         {
             BeginPanic(distance > 0.01f ? awayFromBlast / distance : Vector2.UnitX, 8.0f);
+        }
+    }
+
+    public void ReactToGunfire(Vector2 sourceMeters, float panicRadiusMeters)
+    {
+        if (Role != CharacterRole.Resident || IsDead)
+        {
+            return;
+        }
+
+        Vector2 awayFromSource = PositionMeters - sourceMeters;
+        float distance = awayFromSource.Length();
+        if (distance <= panicRadiusMeters)
+        {
+            BeginPanic(distance > 0.01f ? awayFromSource / distance : Vector2.UnitX, 4.0f);
+        }
+    }
+
+    public bool TryFireAt(Vector2 targetMeters, float rangeMeters, out GuardRound? round)
+    {
+        round = null;
+        if (Role != CharacterRole.Guard || !isAggroed || IsDead || IsKnockedDown ||
+            IsPanicking || IsInvestigating)
+        {
+            return false;
+        }
+
+        Vector2 toTarget = targetMeters - PositionMeters;
+        float distance = toTarget.Length();
+        if (distance < 0.01f || distance > rangeMeters)
+        {
+            return false;
+        }
+
+        Vector2 direction = toTarget / distance;
+        FacingRadians = MathF.Atan2(direction.Y, direction.X);
+        if (guardShotCooldownSeconds > 0.0f)
+        {
+            return false;
+        }
+
+        Vector2 side = new(-direction.Y, direction.X);
+        Vector2 muzzlePosition = PositionMeters + direction * 1.05f + side * 0.16f;
+        round = new GuardRound(muzzlePosition, direction);
+        guardShotCooldownSeconds = GuardShotIntervalSeconds;
+        MuzzleFlashAgeSeconds = 0.08f;
+        return true;
+    }
+
+    public void UpdateGuardAggro(
+        Vector2 targetMeters,
+        float rangeMeters,
+        bool hasLineOfSight,
+        bool targetAvailable = true)
+    {
+        if (Role != CharacterRole.Guard)
+        {
+            return;
+        }
+
+        float distance = Vector2.Distance(PositionMeters, targetMeters);
+        if (!targetAvailable || IsDead || distance > rangeMeters)
+        {
+            DisengageFromTarget();
+            return;
+        }
+
+        if (hasLineOfSight && !IsKnockedDown && !IsInvestigating)
+        {
+            isAggroed = true;
+            isReturningToPost = false;
+        }
+
+        if (isAggroed && !IsPanicking)
+        {
+            Vector2 toTarget = targetMeters - PositionMeters;
+            if (toTarget.LengthSquared() > 0.0001f)
+            {
+                FacingRadians = MathF.Atan2(toTarget.Y, toTarget.X);
+            }
+        }
+    }
+
+    private void DisengageFromTarget()
+    {
+        if (isAggroed)
+        {
+            isAggroed = false;
+            isReturningToPost = true;
         }
     }
 
@@ -612,6 +810,40 @@ internal sealed class AmbientCharacter
 
         panicDirection = Vector2.Normalize(direction);
         panicTimerSeconds = MathF.Max(panicTimerSeconds, durationSeconds);
+        isInvestigating = false;
+    }
+
+    private void ApplyMovementForce(Vector2 desiredVelocity, float maximumAcceleration)
+    {
+        Vector2 acceleration = (desiredVelocity - LinearVelocityMetersPerSecond) * 2.4f;
+        if (acceleration.LengthSquared() > maximumAcceleration * maximumAcceleration)
+        {
+            acceleration = Vector2.Normalize(acceleration) * maximumAcceleration;
+        }
+
+        Vector2 force = acceleration * MassKilograms;
+        b2Body_ApplyForceToCenter(bodyId, new B2Vec2(force.X, force.Y), true);
+    }
+
+    private void ApplyGuardPatrol(
+        Vector2 patrolCenterMeters,
+        float radiusMeters,
+        float speedMetersPerSecond,
+        IReadOnlyList<WallSegment> obstacles)
+    {
+        float patrolAngle = AnimationAgeSeconds * 0.45f + animationOffset;
+        Vector2 patrolTarget = patrolCenterMeters +
+            new Vector2(MathF.Cos(patrolAngle), MathF.Sin(patrolAngle)) * radiusMeters;
+        Vector2 toTarget = patrolTarget - PositionMeters;
+        Vector2 desiredVelocity = Vector2.Zero;
+        if (toTarget.LengthSquared() > 0.01f)
+        {
+            Vector2 direction = ChoosePanicDirection(PositionMeters, Vector2.Normalize(toTarget), obstacles);
+            desiredVelocity = direction * speedMetersPerSecond;
+            FacingRadians = MathF.Atan2(direction.Y, direction.X);
+        }
+
+        ApplyMovementForce(desiredVelocity, 4.5f);
     }
 
     internal static Vector2 ChoosePanicDirection(

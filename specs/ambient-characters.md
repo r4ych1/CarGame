@@ -20,26 +20,29 @@ code-drawn people with lightweight movement and collision behavior.
 - The living top-down sprite uses a compact rectangular torso with its head
   centered over its forward end. Arms and legs swing forward and backward along
   the facing direction with opposing walking phases.
+- A compact, soft shadow is cast slightly down and right from each living person
+  by the same implied upper-left light source used for cars and scenery. Its
+  short offset keeps the figure visually grounded rather than floating.
 - People have lightweight physics and can be pushed by vehicles and props.
 - A direct car impact transfers a small, capped amount of the vehicle's momentum
   and spin to the person for 0.22 seconds before removing their collision
   response. This gives the impact physical weight without letting the body stay
   pinned to the bumper. The visual fall, flattened body, and persistent blood
   pool remain.
-- People within the 16-metre deadly zone are killed and thrown outward.
+- People within the 20-metre deadly zone are killed and thrown outward.
 - People within 10 metres of ground zero burst into separate physics-driven
   body parts. When each part settles, a clearly visible blood pool spreads
   beneath it for about 0.8 seconds and then persists until reset.
 - Separated body parts inherit the person's pre-blast motion but receive only
   5 to 14 m/s of additional outward speed, keeping the remains substantially
   closer to the blast than an intact fatal victim.
-- People between 16 and 32 metres are knocked away with physics but survive and
+- People between 20 and 32 metres are knocked away with physics but survive and
   are thrown prone without blood. They lie sprawled for about 2.8 seconds, then
   get up and recover their authored activity. Their prone appearance is about
   60% of their standing visual size.
 - Fatal blast launch speed is about 18 m/s at the 32-metre outer edge and up to
   105 m/s near the center. Nonfatal damage-zone launches are stronger: about
-  28 m/s near the outer edge and up to 68 m/s near the 16-metre death boundary.
+  28 m/s near the outer edge and up to 54 m/s near the 20-metre death boundary.
   Both use nonlinear distance falloff.
 - Pressing R restores the same people, paths, and living state.
 - Walkers move at roughly 1.5 to 2.3 m/s. Panicked people run at about 8 m/s.
@@ -92,16 +95,18 @@ code-drawn people with lightweight movement and collision behavior.
   half of a 4.2-metre traffic car.
 - The head is centered across the torso rectangle, and walking limb swings
   follow the character's direction of travel.
+- The living-person shadow follows the shared scene-light direction with a
+  shorter offset than vehicle and building shadows.
 - People remain within their authored paths while alive and stay inside the
   playable area.
 - Every authored spawn and walking path lies outside the visible stream, unless
   it is on the bridge. Living people fleeing or displaced by physics remain out
   of the stream.
-- Explosions within 16 metres kill people; impacts from 16 to 32 metres throw
+- Explosions within 20 metres kill people; impacts from 20 to 32 metres throw
   them back with physics and leave them sprawled on the ground without blood
   for about 2.8 seconds before they recover. The prone drawing is about 60% of
   standing size. Nonfatal impact speed ranges from about 28 m/s at the outer
-  edge to 68 m/s near the death boundary. Fatal impacts retain their existing
+  edge to 54 m/s near the death boundary. Fatal impacts retain their existing
   18 to 105 m/s distance profile.
 - People killed within 10 metres split into physics-driven body pieces, each
   leaving a visible, persistent blood pool where it comes to rest. Added

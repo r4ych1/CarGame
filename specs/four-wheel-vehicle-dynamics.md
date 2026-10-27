@@ -120,6 +120,8 @@ engine RPM, shift state, heave, roll, and pitch.
 - Keep contact locations fixed. Shift and shade the chassis subtly toward more
   compressed corners to show pitch and roll, with a clamped visual-only offset
   that never changes collision geometry.
+- Render a subtle chassis-sized ground shadow cast down and right from the player
+  car by the environment's implied upper-left light source.
 - Display gear, RPM, ABS activity, and compact FL/FR/RL/RR load and grip values.
 
 ## Acceptance criteria

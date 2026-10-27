@@ -271,9 +271,15 @@ internal sealed class WorldDebris
 
 internal sealed class DrivingEnvironment
 {
+    private const float MainRoadHalfWidthMeters = 5.0f;
+    private const float DirtRoadHalfWidthMeters = 2.5f;
+    private const float RoadsideBushClearanceMeters = 1.0f;
     public const float BlastRadiusMeters = 32.0f;
     public const float DeadlyBlastRadiusMeters = 16.0f;
+    public const float CharacterDeadlyBlastRadiusMeters = 20.0f;
     private const float ExplosionPanicRadiusMeters = BlastRadiusMeters + 12.0f;
+    internal const float GuardEngagementRangeMeters = 36.0f;
+    internal const float GunfirePanicRadiusMeters = 22.0f;
     public static readonly Vector2 BoundaryMinimumMeters = new(-80.0f, -380.0f);
     public static readonly Vector2 BoundaryMaximumMeters = new(80.0f, 70.0f);
     public const float StreamCenterYMeters = -120.0f;
@@ -310,6 +316,7 @@ internal sealed class DrivingEnvironment
     private readonly List<WallSegment> townWalls = [];
     private readonly List<WallSegment> pedestrianPanicBarriers = [];
     private readonly List<AmbientCharacter> characters = [];
+    private readonly List<GuardRound> guardRounds = [];
 
     public DrivingEnvironment(B2WorldId worldId)
     {
@@ -330,15 +337,19 @@ internal sealed class DrivingEnvironment
     public IReadOnlyList<PhysicsProp> Props => props;
     public IReadOnlyList<WallSegment> TownWalls => townWalls;
     public IReadOnlyList<AmbientCharacter> Characters => characters;
+    public IReadOnlyList<GuardRound> GuardRounds => guardRounds;
     public static IReadOnlyList<Vector2> DirtRoadPointsMeters => dirtRoadPointsMeters;
     public TrafficSystem Traffic { get; }
     public float WaterFlowAgeSeconds { get; private set; }
 
-    public void Step(float timeStep, Vector2? playerObstacleMeters = null)
+    public void Step(float timeStep, Vehicle? playerVehicle = null)
     {
         WaterFlowAgeSeconds += timeStep;
         UpdateCharacterFear();
         foreach (AmbientCharacter character in characters) character.Step(timeStep, pedestrianPanicBarriers);
+        IReadOnlyList<ShotObstacle> shotObstacles = BuildShotObstacles();
+        UpdateGuardCombat(playerVehicle, shotObstacles);
+        UpdateGuardRounds(timeStep, playerVehicle, shotObstacles);
         foreach (WorldDebris item in debris) item.Step(timeStep);
         foreach (BlastVisualEffect effect in blastEffects) effect.Step(timeStep);
         foreach (PhysicsProp prop in props) prop.Step(timeStep);
@@ -351,13 +362,14 @@ internal sealed class DrivingEnvironment
         foreach (PhysicsProp prop in props)
             if (!prop.IsAnchored && prop.Kind != PhysicsPropKind.GuardRail)
                 trafficObstacles.Add(new(prop.PositionMeters, MathF.Max(prop.SizeMeters.X, prop.SizeMeters.Y) * 0.5f));
-        if (playerObstacleMeters.HasValue)
-            trafficObstacles.Add(new(playerObstacleMeters.Value, 1.5f));
+        if (playerVehicle is not null && !playerVehicle.IsExploded && !playerVehicle.IsSunk)
+            trafficObstacles.Add(new(playerVehicle.PositionMeters, 1.5f));
         Traffic.Step(timeStep, trafficObstacles);
     }
 
     public void PostPhysicsStep(Vehicle playerVehicle)
     {
+        IReadOnlyList<ShotObstacle> shotObstacles = BuildShotObstacles();
         foreach (AmbientCharacter character in characters)
         {
             character.KeepOutOfStream(
@@ -368,10 +380,15 @@ internal sealed class DrivingEnvironment
 
             if (!playerVehicle.IsExploded && !playerVehicle.IsSunk)
             {
-                character.TryFleeFromVehicle(
-                    playerVehicle.PositionMeters,
-                    playerVehicle.VelocityMetersPerSecond,
-                    10.0f);
+                bool canSeePlayer = character.Role != CharacterRole.Guard ||
+                    HasLineOfSight(character.PositionMeters, playerVehicle.PositionMeters, shotObstacles);
+                if (canSeePlayer)
+                {
+                    character.TryFleeFromVehicle(
+                        playerVehicle.PositionMeters,
+                        playerVehicle.VelocityMetersPerSecond,
+                        10.0f);
+                }
             }
 
             if (character.IsDead)
@@ -423,8 +440,11 @@ internal sealed class DrivingEnvironment
         blastEffects.Add(new(center));
         foreach (AmbientCharacter character in characters)
         {
-            character.ReactToExplosion(center, ExplosionPanicRadiusMeters);
-            character.ApplyBlast(center, BlastRadiusMeters, DeadlyBlastRadiusMeters);
+            character.ReactToExplosion(
+                center,
+                ExplosionPanicRadiusMeters,
+                BlastRadiusMeters);
+            character.ApplyBlast(center, BlastRadiusMeters, CharacterDeadlyBlastRadiusMeters);
         }
 
         foreach (PhysicsProp prop in props) prop.ApplyBlast(center, BlastRadiusMeters);
@@ -512,6 +532,148 @@ internal sealed class DrivingEnvironment
         }
     }
 
+    private void UpdateGuardCombat(
+        Vehicle? playerVehicle,
+        IReadOnlyList<ShotObstacle> shotObstacles)
+    {
+        if (playerVehicle is null || playerVehicle.IsExploded || playerVehicle.IsSunk)
+        {
+            foreach (AmbientCharacter guard in characters)
+            {
+                guard.UpdateGuardAggro(
+                    Vector2.Zero,
+                    GuardEngagementRangeMeters,
+                    false,
+                    false);
+            }
+            return;
+        }
+
+        foreach (AmbientCharacter guard in characters)
+        {
+            if (guard.Role != CharacterRole.Guard)
+            {
+                continue;
+            }
+
+
+            bool hasLineOfSight = HasLineOfSight(
+                guard.PositionMeters,
+                playerVehicle.PositionMeters,
+                shotObstacles);
+            guard.UpdateGuardAggro(
+                playerVehicle.PositionMeters,
+                GuardEngagementRangeMeters,
+                hasLineOfSight);
+            if (!hasLineOfSight)
+            {
+                continue;
+            }
+
+            if (!guard.TryFireAt(
+                playerVehicle.PositionMeters,
+                GuardEngagementRangeMeters,
+                out GuardRound? round) || round is null)
+            {
+                continue;
+            }
+
+            guardRounds.Add(round);
+            foreach (AmbientCharacter character in characters)
+            {
+                character.ReactToGunfire(guard.PositionMeters, GunfirePanicRadiusMeters);
+            }
+        }
+    }
+
+    private void UpdateGuardRounds(
+        float timeStep,
+        Vehicle? playerVehicle,
+        IReadOnlyList<ShotObstacle> shotObstacles)
+    {
+        bool canHitVehicle = playerVehicle is not null &&
+            !playerVehicle.IsExploded &&
+            !playerVehicle.IsSunk;
+        Vector2 vehiclePosition = canHitVehicle ? playerVehicle!.PositionMeters : Vector2.Zero;
+        float vehicleRotation = canHitVehicle ? playerVehicle!.RotationRadians : 0.0f;
+        Vector2 vehicleSize = canHitVehicle
+            ? new Vector2(
+                playerVehicle!.Definition.Chassis.WidthMeters,
+                playerVehicle.Definition.Chassis.LengthMeters)
+            : Vector2.Zero;
+
+        for (int index = guardRounds.Count - 1; index >= 0; index--)
+        {
+            GuardRound round = guardRounds[index];
+            round.Step(
+                timeStep,
+                canHitVehicle,
+                vehiclePosition,
+                vehicleRotation,
+                vehicleSize,
+                shotObstacles);
+            if (round.IsExpired)
+            {
+                guardRounds.RemoveAt(index);
+            }
+        }
+    }
+
+    internal static bool HasLineOfSight(
+        Vector2 startMeters,
+        Vector2 targetMeters,
+        IReadOnlyList<ShotObstacle> obstacles)
+    {
+        foreach (ShotObstacle obstacle in obstacles)
+        {
+            if (GuardRound.TryIntersectOrientedRectangle(
+                startMeters,
+                targetMeters,
+                obstacle.PositionMeters,
+                obstacle.RotationRadians,
+                obstacle.SizeMeters,
+                out float intersectionFraction) &&
+                intersectionFraction > 0.01f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private IReadOnlyList<ShotObstacle> BuildShotObstacles()
+    {
+        List<ShotObstacle> obstacles = [];
+        foreach (WallSegment wall in townWalls)
+        {
+            obstacles.Add(new(wall.PositionMeters, wall.SizeMeters, 0.0f));
+        }
+        foreach (SceneryObject item in scenery)
+        {
+            if (!item.IsDestroyed && item.HasBody)
+            {
+                obstacles.Add(new(item.PositionMeters, item.SizeMeters, item.RotationRadians));
+            }
+        }
+        foreach (PhysicsProp prop in props)
+        {
+            obstacles.Add(new(prop.PositionMeters, prop.SizeMeters, prop.RotationRadians));
+        }
+        foreach (TrafficVehicle trafficVehicle in Traffic.Vehicles)
+        {
+            if (trafficVehicle.IsActive)
+            {
+                obstacles.Add(new(
+                    trafficVehicle.PositionMeters,
+                    trafficVehicle.SizeMeters,
+                    trafficVehicle.RotationRadians));
+            }
+        }
+
+        return obstacles;
+    }
+
     private void CreateBuildingDebris(SceneryObject building, Vector2 blastCenter, Vector2 fallbackDirection)
     {
         bool isLargeBuilding = building.Kind == SceneryKind.Building &&
@@ -581,7 +743,7 @@ internal sealed class DrivingEnvironment
         foreach (WorldDebris item in debris) item.Destroy();
         foreach (PhysicsProp prop in props) prop.Destroy();
         foreach (AmbientCharacter character in characters) character.Destroy();
-        scenery.Clear(); debris.Clear(); craters.Clear(); blastEffects.Clear(); props.Clear(); characters.Clear(); Build(); BuildProps(); BuildCharacters();
+        scenery.Clear(); debris.Clear(); craters.Clear(); blastEffects.Clear(); props.Clear(); characters.Clear(); guardRounds.Clear(); Build(); BuildProps(); BuildCharacters();
         WaterFlowAgeSeconds = 0.0f;
         Traffic.Reset();
     }
@@ -623,6 +785,70 @@ internal sealed class DrivingEnvironment
         return BridgeCenterXMeters + ((curvedCenter - BridgeCenterXMeters) * transition);
     }
 
+    internal static bool IsBushClearOfRoads(Vector2 positionMeters, float bushRadiusMeters)
+    {
+        float requiredMainRoadDistance = MainRoadHalfWidthMeters +
+            RoadsideBushClearanceMeters + bushRadiusMeters;
+        Vector2 previousMainRoadPoint = new(RoadCenterXMeters(60.0f), 60.0f);
+        for (int index = 1; index < 46; index++)
+        {
+            float y = 60.0f - index * 10.0f;
+            Vector2 mainRoadPoint = new(RoadCenterXMeters(y), y);
+            if (DistanceToSegment(
+                positionMeters,
+                previousMainRoadPoint,
+                mainRoadPoint) < requiredMainRoadDistance)
+            {
+                return false;
+            }
+
+            previousMainRoadPoint = mainRoadPoint;
+        }
+
+        float requiredDirtRoadDistance = DirtRoadHalfWidthMeters +
+            RoadsideBushClearanceMeters + bushRadiusMeters;
+        for (int index = 1; index < dirtRoadPointsMeters.Length; index++)
+        {
+            if (DistanceToSegment(
+                positionMeters,
+                dirtRoadPointsMeters[index - 1],
+                dirtRoadPointsMeters[index]) < requiredDirtRoadDistance)
+            {
+                return false;
+            }
+        }
+
+        const float townStreetHalfWidthMeters = 3.5f;
+        float townStreetClearance = townStreetHalfWidthMeters +
+            RoadsideBushClearanceMeters + bushRadiusMeters;
+        for (int row = 0; row < 4; row++)
+        {
+            float streetCenterY = -264.5f - row * 16.0f;
+            float horizontalClearance = RoadsideBushClearanceMeters + bushRadiusMeters;
+            bool besideStreet = positionMeters.X >= -42.0f - horizontalClearance &&
+                positionMeters.X <= 42.0f + horizontalClearance;
+            if (besideStreet && MathF.Abs(positionMeters.Y - streetCenterY) < townStreetClearance)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static float DistanceToSegment(Vector2 point, Vector2 start, Vector2 end)
+    {
+        Vector2 segment = end - start;
+        float lengthSquared = segment.LengthSquared();
+        if (lengthSquared < 0.0001f)
+        {
+            return Vector2.Distance(point, start);
+        }
+
+        float projection = Math.Clamp(Vector2.Dot(point - start, segment) / lengthSquared, 0.0f, 1.0f);
+        return Vector2.Distance(point, start + segment * projection);
+    }
+
     private void Build()
     {
         // Rural approach: vegetation and sparse structures along the curving road.
@@ -635,7 +861,17 @@ internal sealed class DrivingEnvironment
                 continue;
             float roadX = RoadCenterXMeters(y);
             Add(index % 3 == 0 ? SceneryKind.Rock : SceneryKind.Tree, new(roadX - 24.0f - (index % 4) * 3.0f, y), index % 3 == 0 ? new(2.4f, 2.0f) : new(2.2f, 2.2f));
-            Add(SceneryKind.Bush, new(roadX + 15.0f + (index % 5), y + 4.0f), new(2.5f, 2.0f));
+            Vector2 bushSize = new(2.5f, 2.0f);
+            float bushRadius = bushSize.X * 0.65f;
+            Vector2 bushPosition = new(roadX + 15.0f + (index % 5), y + 4.0f);
+            if (!IsBushClearOfRoads(bushPosition, bushRadius))
+            {
+                bushPosition = new(roadX - 16.0f - (index % 5), y + 4.0f);
+            }
+            if (IsBushClearOfRoads(bushPosition, bushRadius))
+            {
+                Add(SceneryKind.Bush, bushPosition, bushSize);
+            }
         }
         Add(SceneryKind.Building, new(-32.0f, -105.0f), new(12.0f, 8.0f));
         Add(SceneryKind.Building, new(-43.0f, -165.0f), new(10.0f, 9.0f));
@@ -828,6 +1064,22 @@ internal sealed class DrivingEnvironment
             characterIndex++;
         }
 
+        void AddGuard(Vector2 position, float heading)
+        {
+            bool patrolsAtPost = unchecked((characterIndex * 1103515245 + 12345) & 1) == 0;
+            characters.Add(new AmbientCharacter(
+                worldId,
+                CharacterActivity.Standing,
+                position,
+                heading,
+                new ColorRgb(74, 89, 54),
+                skinColors[(characterIndex * 3) % skinColors.Length],
+                characterIndex * 0.67f,
+                role: CharacterRole.Guard,
+                guardPatrolsAtPost: patrolsAtPost));
+            characterIndex++;
+        }
+
         float[] roadsideY = [-40.0f, -61.0f, -82.0f, -143.0f, -168.0f, -193.0f];
         for (int index = 0; index < roadsideY.Length; index++)
         {
@@ -853,6 +1105,13 @@ internal sealed class DrivingEnvironment
         AddResident(new(-36.0f, -170.0f), MathF.PI, CharacterActivity.Working);
         AddResident(new(-35.0f, -181.0f), 0.0f, CharacterActivity.Talking);
         AddResident(new(-35.0f, -188.0f), MathF.PI, CharacterActivity.Standing);
+
+        AddGuard(new(-26.0f, -212.0f), -MathF.PI * 0.5f);
+        AddGuard(new(-9.0f, -224.0f), -MathF.PI * 0.5f);
+        AddGuard(new(-25.0f, -234.0f), -MathF.PI * 0.5f);
+        AddGuard(new(-20.0f, -251.0f), MathF.PI * 0.5f);
+        AddGuard(new(-6.0f, -251.0f), MathF.PI * 0.5f);
+        AddGuard(new(-13.0f, -257.0f), MathF.PI * 0.5f);
 
         for (int row = 0; row < 4; row++)
         {
