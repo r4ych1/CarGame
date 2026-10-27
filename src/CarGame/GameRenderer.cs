@@ -25,7 +25,6 @@ internal sealed class GameRenderer
     private const float MinimumZoom = 0.35f;
     private const float MaximumZoom = 1.35f;
     private const float ZoomStep = 1.12f;
-    private const float ExplodedCameraSpeedMetersPerSecond = 28.0f;
     private const float TireTrailFadeSeconds = 2.0f;
     private const float MaximumTireTrailLengthMeters = 12.0f;
     private static readonly Vector2 GroundShadowDirection = Vector2.Normalize(new Vector2(0.65f, 1.0f));
@@ -36,7 +35,7 @@ internal sealed class GameRenderer
     private readonly List<TireTrailSegment> tireTrails = [];
     private Vector2 cameraTarget;
     private bool wasExploded;
-    private float zoom = 1.0f;
+    private float zoom = 0.5f;
 
     public GameRenderer(int screenWidth, int screenHeight)
     {
@@ -72,7 +71,8 @@ internal sealed class GameRenderer
         }
         DrawGuardRounds(world.Environment.GuardRounds);
         Raylib.EndMode2D();
-        DrawHud(vehicle);
+        DrawHud(world, world.RunStatistics.HudOpacity);
+        DrawGameOverOverlay(world.RunStatistics);
         Raylib.EndDrawing();
     }
 
@@ -85,7 +85,7 @@ internal sealed class GameRenderer
         tireTrails.Clear();
     }
 
-    internal void UpdateCamera(Vehicle vehicle, VehicleInput input, float elapsedSeconds)
+    internal void UpdateCamera(Vehicle vehicle)
     {
         if (!vehicle.IsExploded)
         {
@@ -99,19 +99,6 @@ internal sealed class GameRenderer
             cameraTarget = vehicle.CameraTarget;
             wasExploded = true;
         }
-
-        Vector2 direction = new(input.Steering, -input.Throttle);
-        if (direction.LengthSquared() > 1.0f)
-        {
-            direction = Vector2.Normalize(direction);
-        }
-
-        cameraTarget += direction * ExplodedCameraSpeedMetersPerSecond *
-            SimulationUnits.PixelsPerMeter * elapsedSeconds;
-        cameraTarget = Vector2.Clamp(
-            cameraTarget,
-            DrivingEnvironment.BoundaryMinimumMeters * SimulationUnits.PixelsPerMeter,
-            DrivingEnvironment.BoundaryMaximumMeters * SimulationUnits.PixelsPerMeter);
     }
 
     internal void UpdateZoom(float wheelMovement)
@@ -1471,23 +1458,34 @@ internal sealed class GameRenderer
             new Color(190, 190, 180, 255));
     }
 
-    private void DrawHud(Vehicle vehicle)
+    private void DrawHud(GameWorld world, float opacity)
     {
+        if (opacity <= 0.0f)
+        {
+            return;
+        }
+
+        Vehicle vehicle = world.Vehicle;
+        RunStatistics run = world.RunStatistics;
         float speedKilometersPerHour = vehicle.SpeedMetersPerSecond * 3.6f;
         VehicleDiagnostics state = vehicle.Diagnostics;
         string gear = state.CurrentGear < 0 ? "R" : state.CurrentGear.ToString();
         const int bottomBarHeight = 72;
         int bottomBarY = screenHeight - bottomBarHeight;
-        Raylib.DrawRectangle(0, bottomBarY, screenWidth, bottomBarHeight, new Color(10, 14, 13, 178));
 
         const int smallFontSize = 16;
-        Raylib.DrawText($"GEAR {gear,4}", 34, bottomBarY + 27, smallFontSize, Color.LightGray);
+        Color hudLight = WithOpacity(Color.LightGray, opacity);
+        Color hudText = WithOpacity(Color.RayWhite, opacity);
+        Raylib.DrawText("TIME", 34, bottomBarY + 9, smallFontSize, hudLight);
+        Raylib.DrawText(FormatTime(run.ElapsedSeconds), 34, bottomBarY + 31, 20, hudText);
 
         string speedStatus = $"{speedKilometersPerHour:0} km/h";
         const int speedFontSize = 28;
         int speedX = (screenWidth - Raylib.MeasureText(speedStatus, speedFontSize)) / 2;
-        int speedY = bottomBarY + (vehicle.IsExploded || vehicle.IsSunk ? 8 : 22);
-        Raylib.DrawText(speedStatus, speedX, speedY, speedFontSize, Color.RayWhite);
+        Raylib.DrawText(speedStatus, speedX, bottomBarY + 5, speedFontSize, hudText);
+        string gearStatus = $"GEAR {gear}";
+        int gearX = (screenWidth - Raylib.MeasureText(gearStatus, smallFontSize)) / 2;
+        Raylib.DrawText(gearStatus, gearX, bottomBarY + 43, smallFontSize, hudLight);
 
         const int hpBarWidth = 210;
         const int hpBarHeight = 18;
@@ -1499,13 +1497,13 @@ internal sealed class GameRenderer
             : healthFraction > 0.2f
                 ? new Color(226, 166, 55, 255)
                 : new Color(207, 67, 55, 255);
-        Raylib.DrawText("HP", hpBarX, bottomBarY + 9, smallFontSize, Color.LightGray);
-        Raylib.DrawRectangle(hpBarX, hpBarY, hpBarWidth, hpBarHeight, new Color(36, 42, 40, 235));
-        Raylib.DrawRectangle(hpBarX + 2, hpBarY + 2, (int)((hpBarWidth - 4) * healthFraction), hpBarHeight - 4, hpColor);
-        Raylib.DrawRectangleLines(hpBarX, hpBarY, hpBarWidth, hpBarHeight, new Color(145, 153, 149, 230));
+        Raylib.DrawText("HP", hpBarX, bottomBarY + 9, smallFontSize, hudLight);
+        Raylib.DrawRectangle(hpBarX, hpBarY, hpBarWidth, hpBarHeight, WithOpacity(new Color(36, 42, 40, 235), opacity));
+        Raylib.DrawRectangle(hpBarX + 2, hpBarY + 2, (int)((hpBarWidth - 4) * healthFraction), hpBarHeight - 4, WithOpacity(hpColor, opacity));
+        Raylib.DrawRectangleLines(hpBarX, hpBarY, hpBarWidth, hpBarHeight, WithOpacity(new Color(145, 153, 149, 230), opacity));
 
         string? condition = vehicle.IsExploded
-            ? "EXPLODED - R Reset"
+            ? null
             : vehicle.IsSunk
                 ? "SUNK IN DEEP WATER - R Reset"
                 : null;
@@ -1514,18 +1512,119 @@ internal sealed class GameRenderer
             const int conditionFontSize = 18;
             int conditionX = (screenWidth - Raylib.MeasureText(condition, conditionFontSize)) / 2;
             Color conditionColor = vehicle.IsSunk ? new Color(107, 190, 222, 255) : Color.Orange;
-            Raylib.DrawText(condition, conditionX, bottomBarY + 42, conditionFontSize, conditionColor);
+            Raylib.DrawRectangle(
+                conditionX - 10,
+                bottomBarY - 28,
+                Raylib.MeasureText(condition, conditionFontSize) + 20,
+                24,
+                WithOpacity(new Color(10, 14, 13, 178), opacity));
+            Raylib.DrawText(condition, conditionX, bottomBarY - 27, conditionFontSize, WithOpacity(conditionColor, opacity));
         }
 
         const int sidebarWidth = 222;
         const int sidebarHeight = 140;
         int sidebarX = screenWidth - sidebarWidth - 18;
         const int sidebarY = 18;
-        Raylib.DrawRectangle(sidebarX, sidebarY, sidebarWidth, sidebarHeight, new Color(10, 14, 13, 168));
-        Raylib.DrawText("CONTROLS", sidebarX + 16, sidebarY + 14, 19, Color.RayWhite);
-        Raylib.DrawText("WASD / Arrows   Drive", sidebarX + 16, sidebarY + 44, 17, Color.LightGray);
-        Raylib.DrawText("Mouse-wheel   Zoom", sidebarX + 16, sidebarY + 68, 17, Color.LightGray);
-        Raylib.DrawText("Space   Detonator", sidebarX + 16, sidebarY + 92, 17, Color.LightGray);
-        Raylib.DrawText("R   Reset", sidebarX + 16, sidebarY + 116, 17, Color.LightGray);
+        Raylib.DrawRectangle(sidebarX, sidebarY, sidebarWidth, sidebarHeight, WithOpacity(new Color(10, 14, 13, 168), opacity));
+        Raylib.DrawText("CONTROLS", sidebarX + 16, sidebarY + 14, 19, hudText);
+        Raylib.DrawText("WASD / Arrows   Drive", sidebarX + 16, sidebarY + 44, 17, hudLight);
+        Raylib.DrawText("Mouse-wheel   Zoom", sidebarX + 16, sidebarY + 68, 17, hudLight);
+        Raylib.DrawText("Space   Detonator", sidebarX + 16, sidebarY + 92, 17, hudLight);
+        Raylib.DrawText("R   Reset", sidebarX + 16, sidebarY + 116, 17, hudLight);
+
+    }
+
+    private void DrawGameOverOverlay(RunStatistics run)
+    {
+        float opacity = run.OverlayOpacity;
+        if (opacity <= 0.0f)
+        {
+            return;
+        }
+
+        int panelAlpha = (int)(145.0f * opacity);
+        int textAlpha = (int)(255.0f * opacity);
+
+        const int panelWidth = 760;
+        const int panelHeight = 690;
+        int panelX = (screenWidth - panelWidth) / 2;
+        int panelY = (screenHeight - panelHeight) / 2;
+        Raylib.DrawRectangle(panelX, panelY, panelWidth, panelHeight, new Color(15, 20, 19, panelAlpha));
+
+        Color primary = new(245, 239, 221, textAlpha);
+        Color secondary = new(194, 201, 195, textAlpha);
+        Color accent = new(235, 151, 66, textAlpha);
+        DrawCenteredText("GAME OVER", panelY + 18, 38, accent);
+        string reason = run.EndReason == GameOverReason.Exploded
+            ? "VEHICLE EXPLODED"
+            : "VEHICLE DISABLED";
+        DrawCenteredText(reason, panelY + 63, 19, secondary);
+
+        ScoreAwards score = run.Breakdown;
+        (string Label, int Count, int Value)[] rows =
+        [
+            ("Civilians injured", score.CivilianInjuries, RunStatistics.InjuredPersonPoints),
+            ("Civilians killed", score.CivilianKills, RunStatistics.KilledPersonPoints),
+            ("Civilians exploded", score.CivilianExplosions, RunStatistics.ExplodedPersonPoints),
+            ("Soldiers injured", score.SoldierInjuries, RunStatistics.InjuredPersonPoints),
+            ("Soldiers killed", score.SoldierKills, RunStatistics.KilledPersonPoints),
+            ("Soldiers exploded", score.SoldierExplosions, RunStatistics.ExplodedPersonPoints),
+            ("Vehicles disabled", score.DisabledVehicles, RunStatistics.DisabledVehiclePoints),
+            ("Vehicles destroyed", score.DestroyedVehicles, RunStatistics.DestroyedVehiclePoints),
+            ("Structures damaged", score.DamagedStructures, RunStatistics.DamagedStructurePoints),
+            ("Structures destroyed", score.DestroyedStructures, RunStatistics.DestroyedStructurePoints),
+            ("Other scenery destroyed", score.DestroyedScenery, RunStatistics.DestroyedSceneryPoints),
+        ];
+
+        int eventX = panelX + 42;
+        int countRightX = panelX + 430;
+        int valueRightX = panelX + 555;
+        int subtotalRightX = panelX + 710;
+        int headerY = panelY + 96;
+        Raylib.DrawText("EVENT", eventX, headerY, 16, secondary);
+        DrawRightAlignedText("COUNT", countRightX, headerY, 16, secondary);
+        DrawRightAlignedText("EACH", valueRightX, headerY, 16, secondary);
+        DrawRightAlignedText("POINTS", subtotalRightX, headerY, 16, secondary);
+        Raylib.DrawLine(panelX + 36, headerY + 22, panelX + panelWidth - 36, headerY + 22, new Color(100, 111, 105, textAlpha));
+
+        int rowY = headerY + 30;
+        foreach ((string label, int count, int value) in rows)
+        {
+            Raylib.DrawText(label, eventX, rowY, 17, primary);
+            DrawRightAlignedText(count.ToString(), countRightX, rowY, 17, primary);
+            DrawRightAlignedText($"{value:N0}", valueRightX, rowY, 17, secondary);
+            DrawRightAlignedText($"{count * value:N0}", subtotalRightX, rowY, 17, primary);
+            rowY += 23;
+        }
+
+        Raylib.DrawLine(panelX + 36, rowY + 1, panelX + panelWidth - 36, rowY + 1, new Color(100, 111, 105, textAlpha));
+        DrawCenteredText($"TOTAL SCORE  {run.TotalScore:N0}", rowY + 17, 29, accent);
+        DrawCenteredText($"DAMAGE TAKEN  {run.DamageTakenPercent:0}%", rowY + 62, 18, secondary);
+        DrawCenteredText($"TOP SPEED  {run.TopSpeedKilometersPerHour:0} km/h", rowY + 90, 18, secondary);
+        DrawCenteredText($"RUN TIME  {FormatTime(run.ElapsedSeconds)}", rowY + 118, 18, secondary);
+        DrawCenteredText("PRESS R TO RESET", rowY + 158, 20, accent);
+    }
+
+    private static void DrawRightAlignedText(string text, int rightX, int y, int fontSize, Color color)
+    {
+        Raylib.DrawText(text, rightX - Raylib.MeasureText(text, fontSize), y, fontSize, color);
+    }
+
+    private void DrawCenteredText(string text, int y, int fontSize, Color color)
+    {
+        int x = (screenWidth - Raylib.MeasureText(text, fontSize)) / 2;
+        Raylib.DrawText(text, x, y, fontSize, color);
+    }
+
+    private static Color WithOpacity(Color color, float opacity) =>
+        new(color.R, color.G, color.B, (int)(color.A * Math.Clamp(opacity, 0.0f, 1.0f)));
+
+    internal static string FormatTime(float seconds)
+    {
+        int totalTenths = Math.Max(0, (int)MathF.Floor(seconds * 10.0f));
+        int minutes = totalTenths / 600;
+        int wholeSeconds = totalTenths / 10 % 60;
+        int tenths = totalTenths % 10;
+        return $"{minutes:00}:{wholeSeconds:00}.{tenths}";
     }
 }

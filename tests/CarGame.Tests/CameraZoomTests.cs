@@ -10,11 +10,12 @@ public sealed class CameraZoomTests
     {
         GameRenderer renderer = new(1280, 720);
 
+        Assert.Equal(0.5f, renderer.Zoom);
         renderer.UpdateZoom(1.0f);
-        Assert.True(renderer.Zoom > 1.0f);
+        Assert.True(renderer.Zoom > 0.5f);
 
         renderer.UpdateZoom(-1.0f);
-        Assert.Equal(1.0f, renderer.Zoom, 0.0001f);
+        Assert.Equal(0.5f, renderer.Zoom, 0.0001f);
     }
 
     [Fact]
@@ -30,37 +31,34 @@ public sealed class CameraZoomTests
     }
 
     [Fact]
-    public void WasdPansCameraOnlyAfterExplosion()
+    public void WasdDoesNotPanCameraAfterExplosion()
     {
         using GameWorld world = new();
         GameRenderer renderer = new(1280, 720);
-        VehicleInput input = new(1.0f, 1.0f);
 
-        renderer.UpdateCamera(world.Vehicle, input, 1.0f);
+        renderer.UpdateCamera(world.Vehicle);
         Assert.Equal(world.Vehicle.Position, renderer.CameraTarget);
 
         world.ExplodeVehicle();
-        renderer.UpdateCamera(world.Vehicle, input, 1.0f);
+        renderer.UpdateCamera(world.Vehicle);
+        Vector2 explosionTarget = renderer.CameraTarget;
+        renderer.UpdateCamera(world.Vehicle);
 
-        Vector2 movement = renderer.CameraTarget - world.Vehicle.CameraTarget;
-        float expectedDistance = 28.0f * SimulationUnits.PixelsPerMeter;
-        Assert.Equal(expectedDistance, movement.Length(), 0.01f);
-        Assert.True(movement.X > 0.0f);
-        Assert.True(movement.Y < 0.0f);
+        Assert.Equal(world.Vehicle.CameraTarget, explosionTarget);
+        Assert.Equal(explosionTarget, renderer.CameraTarget);
     }
 
     [Fact]
-    public void ExplodedCameraPanStaysInsidePlayableBoundary()
+    public void ResetRestoresVehicleFollowCamera()
     {
         using GameWorld world = new();
         GameRenderer renderer = new(1280, 720);
         world.ExplodeVehicle();
+        renderer.UpdateCamera(world.Vehicle);
 
-        renderer.UpdateCamera(world.Vehicle, new VehicleInput(-1.0f, -1.0f), 100.0f);
+        world.ResetVehicle();
+        renderer.UpdateCamera(world.Vehicle);
 
-        Vector2 expected = new(
-            DrivingEnvironment.BoundaryMinimumMeters.X * SimulationUnits.PixelsPerMeter,
-            DrivingEnvironment.BoundaryMaximumMeters.Y * SimulationUnits.PixelsPerMeter);
-        Assert.Equal(expected, renderer.CameraTarget);
+        Assert.Equal(world.Vehicle.Position, renderer.CameraTarget);
     }
 }

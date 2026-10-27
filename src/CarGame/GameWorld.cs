@@ -18,10 +18,12 @@ internal sealed class GameWorld : IDisposable
         worldId = b2CreateWorld(worldDefinition);
         Vehicle = new Vehicle(worldId, VehicleCatalog.FirstCar);
         Environment = new DrivingEnvironment(worldId);
+        RunStatistics = new RunStatistics();
     }
 
     public Vehicle Vehicle { get; }
     public DrivingEnvironment Environment { get; }
+    public RunStatistics RunStatistics { get; }
 
     public void Step(VehicleInput input, float fixedTimeStep, int subSteps)
     {
@@ -33,21 +35,26 @@ internal sealed class GameWorld : IDisposable
         Environment.Step(fixedTimeStep, Vehicle);
         b2World_Step(worldId, fixedTimeStep, subSteps);
         ApplyVehicleCollisionDamage();
-        Environment.PostPhysicsStep(Vehicle);
+        ScoreAwards collisionAwards = Environment.PostPhysicsStep(Vehicle);
+        RunStatistics.Award(collisionAwards);
+        RunStatistics.Step(fixedTimeStep, Vehicle);
     }
 
     public void ResetVehicle()
     {
         Vehicle.Reset();
         Environment.Reset();
+        RunStatistics.Reset();
     }
 
     public void ExplodeVehicle()
     {
         if (!Vehicle.IsExploded && !Vehicle.IsSunk && !Vehicle.IsDisabled)
         {
-            Environment.Explode(Vehicle.PositionMeters);
+            ScoreAwards awards = Environment.Explode(Vehicle.PositionMeters);
+            RunStatistics.Award(awards);
             Vehicle.Explode();
+            RunStatistics.Finish(GameOverReason.Exploded, Vehicle);
         }
     }
 

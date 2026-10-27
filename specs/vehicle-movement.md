@@ -8,7 +8,8 @@ simulation.
 
 ## Player-visible behavior
 
-- The game opens with a car centered in a camera-followed test grid.
+- The game opens with a car centered in a camera-followed test grid at a 0.5
+  zoom level, providing a broad view of the nearby road and environment.
 - `W` or Up accelerates forward; `S` or Down brakes and reverses. The simulation supports
   a dedicated brake without selecting reverse.
 - `A`/`D` or Left/Right steer. Steering has no effect while stationary and
@@ -37,6 +38,8 @@ simulation.
   at the rendering/application boundary.
 - Cap accumulated frame time so a paused or dragged window cannot trigger an
   unbounded physics catch-up.
+- Initialize camera zoom to 0.5 while retaining mouse-wheel adjustment and the
+  existing usable zoom limits.
 
 ## Acceptance criteria
 
@@ -51,6 +54,8 @@ simulation.
 - On the default surface, ordinary steering remains planted; noticeable drift
   requires an abrupt input at higher speed.
 - Reset restores the origin, upward heading, and zero linear/angular velocity.
+- The initial camera zoom is 0.5 and shows substantially more surroundings than
+  a one-to-one zoom.
 - The solution builds without warnings or errors.
 
 ## Non-goals
