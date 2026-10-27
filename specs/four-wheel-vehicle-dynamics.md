@@ -145,10 +145,11 @@ engine RPM, shift state, heave, roll, and pitch.
   that never changes collision geometry.
 - Render a subtle chassis-sized ground shadow cast down and right from the player
   car by the environment's implied upper-left light source.
-- The gameplay HUD replaces diagnostic wheel readouts with a translucent bottom
-  bar: speed is fixed at center, a compact Gear readout occupies the left, and a
-  nonnumeric HP bar occupies the right. RPM is omitted. Controls use a separate
-  sidebar.
+- The gameplay HUD replaces diagnostic wheel readouts with background-free
+  bottom fields: speed is fixed at center with a compact Gear readout directly
+  below it, the run timer occupies the left, and a nonnumeric HP bar occupies
+  the right. No dark full-width strip is drawn. RPM is omitted. Controls use a
+  separate sidebar.
 - Player and traffic tires leave subtle fading trails capped at approximately 12
   metres behind each rear tire; tiny rear-tire smoke puffs appear only at higher
   speed.

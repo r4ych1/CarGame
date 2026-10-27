@@ -16,8 +16,8 @@ outward explosion impulse.
   rotating car, then receives an outward impulse and spin.
 - Pieces move and rotate independently under Box2D. The intact vehicle is no
   longer drawn or controllable after detonation.
-- After detonation, WASD and arrow keys pan the camera around the playable map
-  at 28 metres per second instead of attempting to control the destroyed car.
+- After detonation, WASD and arrow keys have no effect. The camera remains fixed
+  at the final explosion position.
 - Pressing Space again while exploded has no effect.
 - A car disabled by 100% damage cannot detonate; Space creates no fragments,
   blast effects, crater, or environmental damage until reset.
@@ -45,8 +45,8 @@ outward explosion impulse.
 - Explosion pieces are owned and cleaned up with the vehicle so reset does not
   leak Box2D bodies.
 - Normal vehicle force generation stops after detonation.
-- Camera navigation is clamped to the playable world boundary and resets to
-  normal vehicle-follow behavior when the vehicle is restored.
+- The fixed post-explosion camera resets to normal vehicle-follow behavior when
+  the vehicle is restored.
 
 ## Technical constraints and tuning
 
@@ -103,8 +103,7 @@ outward explosion impulse.
 - From rest, every piece initially has at least 18 m/s of radial outward
   velocity and subsequently loses speed from ground resistance.
 - Controls no longer accelerate or steer the car after detonation.
-- WASD and arrow keys move the camera after detonation, and cannot pan its
-  target outside the playable world boundary.
+- WASD and arrow keys do not move the camera after detonation.
 - Reset destroys the fragments, restores the intact car, and permits another
   detonation.
 - The concussion ring visibly expands from the blast center, debris travels
@@ -132,8 +131,8 @@ outward explosion impulse.
    debris.
 4. Press Space repeatedly and confirm no extra debris appears.
    Disable the reset car through damage, press Space, and confirm nothing explodes.
-5. Use WASD and the arrow keys after detonation; confirm the camera can inspect
-   the map while the debris remains unaffected.
+5. Use WASD and the arrow keys after detonation; confirm neither the camera nor
+   the debris responds.
 6. Confirm the flash, expanding concussion ring, and debris streaks fade while
    varied-size filled smoke puffs expand and trail outward across the blast area.
 7. Confirm ground-zero smoke reads as a few large, layered, filled pulses rather

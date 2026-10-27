@@ -11,6 +11,8 @@ namespace CarGame;
 internal readonly record struct TrafficRoutePoint(Vector2 PositionMeters, float SpeedMetersPerSecond);
 internal readonly record struct TrafficObstacle(Vector2 PositionMeters, float RadiusMeters);
 internal enum TrafficRecoveryState { Driving, WaitingAfterImpact }
+internal enum TrafficBlastOutcome { None, Disabled, Destroyed }
+internal readonly record struct TrafficBlastResults(int DisabledVehicles, int DestroyedVehicles);
 
 internal sealed class TrafficVehicle
 {
@@ -227,12 +229,12 @@ internal sealed class TrafficVehicle
         return velocityBefore.Length() >= 0.5f && (velocityAfter - velocityBefore).Length() >= 0.3f;
     }
 
-    public void ApplyBlast(Vector2 center, float radius, float deadlyRadius)
+    public TrafficBlastOutcome ApplyBlast(Vector2 center, float radius, float deadlyRadius)
     {
-        if (!IsActive || IsWrecked) return;
+        if (!IsActive || IsWrecked) return TrafficBlastOutcome.None;
         Vector2 offset = PositionMeters - center;
         float distance = offset.Length();
-        if (distance > radius) return;
+        if (distance > radius) return TrafficBlastOutcome.None;
         DamageEffectAgeSeconds = 0.0f;
         RecoveryState = TrafficRecoveryState.Driving;
         if (distance > deadlyRadius)
@@ -240,7 +242,7 @@ internal sealed class TrafficVehicle
             IsWrecked = false;
             IsDisabled = true;
             rollsWhileDisabled = true;
-            return;
+            return TrafficBlastOutcome.Disabled;
         }
 
         Vector2 direction = distance > 0.01f ? offset / distance : Vector2.UnitX;
@@ -255,6 +257,7 @@ internal sealed class TrafficVehicle
         rollsWhileDisabled = false;
         b2Body_ApplyLinearImpulseToCenter(bodyId, new B2Vec2(direction.X * mass * deltaSpeed, direction.Y * mass * deltaSpeed), true);
         b2Body_ApplyAngularImpulse(bodyId, mass * 0.7f, true);
+        return TrafficBlastOutcome.Destroyed;
     }
 
     private void ApplyWreckGroundResistance(float timeStep)
@@ -434,9 +437,24 @@ internal sealed class TrafficSystem
         return right * selectedSide * strongest;
     }
 
-    public void ApplyBlast(Vector2 center, float radius, float deadlyRadius)
+    public TrafficBlastResults ApplyBlast(Vector2 center, float radius, float deadlyRadius)
     {
-        foreach (TrafficVehicle vehicle in vehicles) vehicle.ApplyBlast(center, radius, deadlyRadius);
+        int disabledVehicles = 0;
+        int destroyedVehicles = 0;
+        foreach (TrafficVehicle vehicle in vehicles)
+        {
+            switch (vehicle.ApplyBlast(center, radius, deadlyRadius))
+            {
+                case TrafficBlastOutcome.Disabled:
+                    disabledVehicles++;
+                    break;
+                case TrafficBlastOutcome.Destroyed:
+                    destroyedVehicles++;
+                    break;
+            }
+        }
+
+        return new TrafficBlastResults(disabledVehicles, destroyedVehicles);
     }
 
     public void PostPhysicsStep()

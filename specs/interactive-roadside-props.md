@@ -16,6 +16,8 @@ other.
   edges and the short approach from the checkpoint to town.
 - The car can push, scatter, and spin every prop. Props rebound according to
   material and lose speed from ground resistance rather than sliding forever.
+- Keep the crate clear of the main-road/side-road junction immediately beyond
+  the bridge so the merge remains unobstructed.
 - A car explosion violently throws all props inside the 32-metre physical impact radius
   outward with nonlinear distance falloff. Objects close to ground zero receive
   much stronger speed changes than objects near the edge. At ground zero, cones
@@ -45,6 +47,7 @@ other.
   represented.
 - Exactly three guardrail props and eight traffic cones are present; all cones
   are confined to the checkpoint and final town approach.
+- No rural crate occupies the side-road merge just beyond the bridge.
 - Props have finite physical state, collide with solid world objects, respond
   to a blast inside the 32-metre impact radius, and remain unaffected by blasts
   outside it.

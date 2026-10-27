@@ -370,8 +370,10 @@ internal sealed class DrivingEnvironment
         Traffic.Step(timeStep, trafficObstacles, craters);
     }
 
-    public void PostPhysicsStep(Vehicle playerVehicle)
+    public ScoreAwards PostPhysicsStep(Vehicle playerVehicle)
     {
+        int civilianKillsFromVehicle = 0;
+        int soldierKillsFromVehicle = 0;
         IReadOnlyList<ShotObstacle> shotObstacles = BuildShotObstacles();
         foreach (AmbientCharacter character in characters)
         {
@@ -408,6 +410,14 @@ internal sealed class DrivingEnvironment
                         playerVehicle.Definition.Chassis.LengthMeters)))
             {
                 character.DieFromVehicleImpact(playerVehicle.VelocityMetersPerSecond);
+                if (character.Role == CharacterRole.Guard)
+                {
+                    soldierKillsFromVehicle++;
+                }
+                else
+                {
+                    civilianKillsFromVehicle++;
+                }
                 continue;
             }
 
@@ -435,25 +445,63 @@ internal sealed class DrivingEnvironment
         }
 
         Traffic.PostPhysicsStep();
+        return new ScoreAwards(
+            CivilianKills: civilianKillsFromVehicle,
+            SoldierKills: soldierKillsFromVehicle);
     }
 
-    public void Explode(Vector2 center)
+    public ScoreAwards Explode(Vector2 center)
     {
+        int civilianInjuries = 0;
+        int civilianKills = 0;
+        int civilianExplosions = 0;
+        int soldierInjuries = 0;
+        int soldierKills = 0;
+        int soldierExplosions = 0;
+        int disabledVehicles = 0;
+        int destroyedVehicles = 0;
+        int damagedStructures = 0;
+        int destroyedStructures = 0;
+        int destroyedScenery = 0;
         craters.Add(center);
         blastEffects.Add(new(center));
         foreach (AmbientCharacter character in characters)
         {
+            bool wasAlive = !character.IsDead;
+            bool wasKnockedDown = character.IsKnockedDown;
             character.ReactToExplosion(
                 center,
                 character.Role == CharacterRole.Guard
                     ? GuardInvestigationRadiusMeters
                     : ExplosionPanicRadiusMeters,
                 BlastRadiusMeters);
-            character.ApplyBlast(center, BlastRadiusMeters, CharacterDeadlyBlastRadiusMeters);
+            bool wasHit = character.ApplyBlast(center, BlastRadiusMeters, CharacterDeadlyBlastRadiusMeters);
+            if (!wasAlive || !wasHit)
+            {
+                continue;
+            }
+
+            if (character.HasExplodedIntoLimbs)
+            {
+                if (character.Role == CharacterRole.Guard) soldierExplosions++;
+                else civilianExplosions++;
+            }
+            else if (character.IsDead)
+            {
+                if (character.Role == CharacterRole.Guard) soldierKills++;
+                else civilianKills++;
+            }
+            else if (!wasKnockedDown && character.IsKnockedDown)
+            {
+                if (character.Role == CharacterRole.Guard) soldierInjuries++;
+                else civilianInjuries++;
+            }
         }
 
         foreach (PhysicsProp prop in props) prop.ApplyBlast(center, BlastRadiusMeters);
-        Traffic.ApplyBlast(center, BlastRadiusMeters, DeadlyBlastRadiusMeters);
+        TrafficBlastResults trafficResults = Traffic.ApplyBlast(center, BlastRadiusMeters, DeadlyBlastRadiusMeters);
+        disabledVehicles += trafficResults.DisabledVehicles;
+        destroyedVehicles += trafficResults.DestroyedVehicles;
         foreach (SceneryObject item in scenery)
         {
             if (item.IsDestroyed) continue;
@@ -462,11 +510,27 @@ internal sealed class DrivingEnvironment
             if (distance > BlastRadiusMeters) continue;
             if (item.Kind is SceneryKind.Building or SceneryKind.Shack && distance > DeadlyBlastRadiusMeters)
             {
+                if (!item.IsCracked)
+                {
+                    damagedStructures++;
+                }
                 item.IsCracked = true;
                 continue;
             }
 
             item.IsDestroyed = true;
+            if (item.Kind is SceneryKind.Building or SceneryKind.Shack)
+            {
+                destroyedStructures++;
+            }
+            else if (item.Kind is SceneryKind.ParkedCar or SceneryKind.ParkedTruck)
+            {
+                destroyedVehicles++;
+            }
+            else
+            {
+                destroyedScenery++;
+            }
             if (item.HasBody) { b2DestroyBody(item.BodyId); item.HasBody = false; }
             if (item.Kind == SceneryKind.Bush) continue;
             Vector2 direction = distance > 0.01f ? offset / distance : Vector2.UnitX;
@@ -507,6 +571,18 @@ internal sealed class DrivingEnvironment
         }
 
         RefreshPedestrianPanicBarriers();
+        return new ScoreAwards(
+            CivilianInjuries: civilianInjuries,
+            CivilianKills: civilianKills,
+            CivilianExplosions: civilianExplosions,
+            SoldierInjuries: soldierInjuries,
+            SoldierKills: soldierKills,
+            SoldierExplosions: soldierExplosions,
+            DisabledVehicles: disabledVehicles,
+            DestroyedVehicles: destroyedVehicles,
+            DamagedStructures: damagedStructures,
+            DestroyedStructures: destroyedStructures,
+            DestroyedScenery: destroyedScenery);
     }
 
     private void UpdateCharacterFear()
@@ -1029,7 +1105,11 @@ internal sealed class DrivingEnvironment
         {
             float y = 22.0f - index * 27.0f;
             float roadX = MathF.Sin(index * 0.36f) * 18.0f;
-            AddProp(PhysicsPropKind.Crate, new(roadX - 15.0f, y), new(1.15f, 1.15f), index * 0.17f);
+            if (index != 6)
+            {
+                AddProp(PhysicsPropKind.Crate, new(roadX - 15.0f, y), new(1.15f, 1.15f), index * 0.17f);
+            }
+
             AddProp(PhysicsPropKind.TrashCan, new(roadX + 15.0f, y + 3.0f), new(0.9f, 1.1f), index * -0.11f);
         }
 

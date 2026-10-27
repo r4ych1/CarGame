@@ -40,9 +40,22 @@ public sealed class PhysicsPropTests
 
         world.ResetVehicle();
 
-        Assert.Equal(59, world.Environment.Props.Count);
+        Assert.Equal(58, world.Environment.Props.Count);
         Assert.Equal(originalPosition, world.Environment.Props[0].PositionMeters);
         Assert.Equal(Vector2.Zero, world.Environment.Props[0].LinearVelocityMetersPerSecond);
+    }
+
+    [Fact]
+    public void RuralCrateIsRemovedFromSideRoadJunctionBeyondBridge()
+    {
+        using GameWorld world = new();
+        float junctionY = 22.0f - 6 * 27.0f;
+        float roadX = MathF.Sin(6 * 0.36f) * 18.0f;
+        Vector2 removedCratePosition = new(roadX - 15.0f, junctionY);
+
+        Assert.DoesNotContain(world.Environment.Props, prop =>
+            prop.Kind == PhysicsPropKind.Crate && prop.PositionMeters == removedCratePosition);
+        Assert.Equal(58, world.Environment.Props.Count);
     }
 
     [Fact]

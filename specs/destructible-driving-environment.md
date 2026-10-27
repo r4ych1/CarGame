@@ -51,6 +51,8 @@ provides scenery, collision, and deterministic blast destruction.
 - The mouse wheel zooms the camera in and out while preserving its current
   target. Zoom is clamped between 0.35x and 1.35x so the closest view retains
   more surrounding context.
+- The game opens at 0.9x zoom, showing slightly more of the surroundings than
+  the previous default view.
 
 ## Functional requirements
 
