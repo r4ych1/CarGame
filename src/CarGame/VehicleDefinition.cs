@@ -163,8 +163,8 @@ internal sealed record TransmissionSettings(
     ImmutableArray<float> ForwardRatios,
     float ReverseRatio,
     float FinalDriveRatio,
-    float UpshiftRevolutionsPerMinute,
-    float DownshiftRevolutionsPerMinute,
+    ImmutableArray<float> UpshiftSpeedsMetersPerSecond,
+    ImmutableArray<float> DownshiftSpeedsMetersPerSecond,
     float ShiftDurationSeconds,
     float DirectionSelectionSpeedMetersPerSecond)
 {
@@ -182,11 +182,39 @@ internal sealed record TransmissionSettings(
 
         Validation.Positive(ReverseRatio, nameof(ReverseRatio));
         Validation.Positive(FinalDriveRatio, nameof(FinalDriveRatio));
-        Validation.Positive(UpshiftRevolutionsPerMinute, nameof(UpshiftRevolutionsPerMinute));
-        Validation.Positive(DownshiftRevolutionsPerMinute, nameof(DownshiftRevolutionsPerMinute));
-        if (DownshiftRevolutionsPerMinute >= UpshiftRevolutionsPerMinute)
+        int shiftBoundaryCount = ForwardRatios.Length - 1;
+        if (UpshiftSpeedsMetersPerSecond.Length != shiftBoundaryCount)
         {
-            throw new ArgumentOutOfRangeException(nameof(DownshiftRevolutionsPerMinute));
+            throw new ArgumentException(
+                "One upshift speed is required between each pair of forward gears.",
+                nameof(UpshiftSpeedsMetersPerSecond));
+        }
+        if (DownshiftSpeedsMetersPerSecond.Length != shiftBoundaryCount)
+        {
+            throw new ArgumentException(
+                "One downshift speed is required between each pair of forward gears.",
+                nameof(DownshiftSpeedsMetersPerSecond));
+        }
+
+        float previousUpshiftSpeed = 0.0f;
+        float previousDownshiftSpeed = 0.0f;
+        for (int index = 0; index < shiftBoundaryCount; index++)
+        {
+            float upshiftSpeed = UpshiftSpeedsMetersPerSecond[index];
+            float downshiftSpeed = DownshiftSpeedsMetersPerSecond[index];
+            Validation.Positive(upshiftSpeed, nameof(UpshiftSpeedsMetersPerSecond));
+            Validation.Positive(downshiftSpeed, nameof(DownshiftSpeedsMetersPerSecond));
+            if (upshiftSpeed <= previousUpshiftSpeed || downshiftSpeed <= previousDownshiftSpeed)
+            {
+                throw new ArgumentException("Forward shift speeds must increase by gear.");
+            }
+            if (downshiftSpeed >= upshiftSpeed)
+            {
+                throw new ArgumentException("Each downshift speed must be below its matching upshift speed.");
+            }
+
+            previousUpshiftSpeed = upshiftSpeed;
+            previousDownshiftSpeed = downshiftSpeed;
         }
 
         Validation.NonNegative(ShiftDurationSeconds, nameof(ShiftDurationSeconds));

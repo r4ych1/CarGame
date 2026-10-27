@@ -207,7 +207,7 @@ internal sealed class Vehicle
 
     public void Explode()
     {
-        if (IsExploded || IsSunk)
+        if (IsExploded || IsSunk || IsDisabled)
         {
             return;
         }

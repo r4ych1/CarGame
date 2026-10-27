@@ -6,12 +6,18 @@ namespace CarGame.Tests;
 public sealed class VehicleDynamicsTests
 {
     [Fact]
-    public void FirstCarUsesEarlierQuickAutomaticUpshifts()
+    public void FirstCarUsesRequestedFiveSpeedShiftBands()
     {
         TransmissionSettings transmission = VehicleCatalog.FirstCar.Transmission;
 
-        Assert.Equal(4_800.0f, transmission.UpshiftRevolutionsPerMinute);
-        Assert.Equal(0.14f, transmission.ShiftDurationSeconds);
+        Assert.Equal(
+            [15.0f, 28.0f, 40.0f, 48.0f],
+            transmission.UpshiftSpeedsMetersPerSecond.Select(ToKilometersPerHour).ToArray());
+        Assert.Equal(
+            [10.0f, 22.0f, 34.0f, 42.0f],
+            transmission.DownshiftSpeedsMetersPerSecond.Select(ToKilometersPerHour).ToArray());
+        Assert.Equal(245.0f, VehicleCatalog.FirstCar.Powertrain.TorqueCurve.Max(point => point.TorqueNewtonMeters));
+        Assert.Equal(0.10f, transmission.ShiftDurationSeconds);
         Assert.Equal(5, transmission.ForwardRatios.Length);
     }
 
@@ -212,15 +218,15 @@ public sealed class VehicleDynamicsTests
     {
         VehicleDefinition definition = VehicleCatalog.FirstCar;
         VehicleSimulationState state = VehicleDynamics.CreateInitialState(definition);
-        float ratio = definition.Transmission.ForwardRatios[0] * definition.Transmission.FinalDriveRatio;
-        float wheelSpeed = 6_000.0f * (2.0f * MathF.PI) / (60.0f * ratio);
+        float roadSpeed = definition.Transmission.UpshiftSpeedsMetersPerSecond[0] + 0.1f;
+        float wheelSpeed = roadSpeed / definition.Tires.WheelRadiusMeters;
         WheelSimulationState wheel = state.Wheels.FrontLeft with { AngularSpeedRadiansPerSecond = wheelSpeed };
         state = state with
         {
             Wheels = state.Wheels with { FrontLeft = wheel, FrontRight = wheel },
         };
         ChassisSample matchingSample = new(
-            VehicleMath.Forward(0.0f) * wheelSpeed * definition.Tires.WheelRadiusMeters,
+            VehicleMath.Forward(0.0f) * roadSpeed,
             0.0f,
             0.0f);
 
@@ -247,22 +253,23 @@ public sealed class VehicleDynamicsTests
             CurrentGear = 3,
             PendingGear = 3,
         };
-        float ratio = definition.Transmission.ForwardRatios[2] * definition.Transmission.FinalDriveRatio;
-        float midWheelSpeed = 3_000.0f * (2.0f * MathF.PI) / (60.0f * ratio);
+        float midRoadSpeed = 35.0f / 3.6f;
+        float midWheelSpeed = midRoadSpeed / definition.Tires.WheelRadiusMeters;
         state = WithAllWheelSpeeds(state, midWheelSpeed);
         ChassisSample matching = new(
-            VehicleMath.Forward(0.0f) * midWheelSpeed * definition.Tires.WheelRadiusMeters,
+            VehicleMath.Forward(0.0f) * midRoadSpeed,
             0.0f,
             0.0f);
 
         state = VehicleDynamics.Step(definition, state, matching, default, FixedTimeStep).State;
         Assert.Equal(0.0f, state.ShiftTimeRemainingSeconds);
 
-        float lowWheelSpeed = 1_500.0f * (2.0f * MathF.PI) / (60.0f * ratio);
+        float lowRoadSpeed = 21.0f / 3.6f;
+        float lowWheelSpeed = lowRoadSpeed / definition.Tires.WheelRadiusMeters;
         state = WithAllWheelSpeeds(state, lowWheelSpeed);
         matching = matching with
         {
-            LinearVelocityMetersPerSecond = VehicleMath.Forward(0.0f) * lowWheelSpeed * definition.Tires.WheelRadiusMeters,
+            LinearVelocityMetersPerSecond = VehicleMath.Forward(0.0f) * lowRoadSpeed,
         };
         state = VehicleDynamics.Step(definition, state, matching, default, FixedTimeStep).State;
 
@@ -270,6 +277,66 @@ public sealed class VehicleDynamicsTests
         Assert.Equal(2, state.PendingGear);
         Assert.True(state.ShiftTimeRemainingSeconds > 0.0f);
     }
+
+    [Theory]
+    [InlineData(1, 2, 15.1f)]
+    [InlineData(2, 3, 28.1f)]
+    [InlineData(3, 4, 40.1f)]
+    [InlineData(4, 5, 48.1f)]
+    public void AutomaticUpshiftsFollowConfiguredRoadSpeeds(int currentGear, int nextGear, float kilometersPerHour)
+    {
+        VehicleDefinition definition = VehicleCatalog.FirstCar;
+        float roadSpeed = kilometersPerHour / 3.6f;
+        float wheelSpeed = roadSpeed / definition.Tires.WheelRadiusMeters;
+        VehicleSimulationState state = WithAllWheelSpeeds(
+            VehicleDynamics.CreateInitialState(definition) with
+            {
+                CurrentGear = currentGear,
+                PendingGear = currentGear,
+            },
+            wheelSpeed);
+        ChassisSample sample = new(VehicleMath.Forward(0.0f) * roadSpeed, 0.0f, 0.0f);
+
+        state = VehicleDynamics.Step(
+            definition,
+            state,
+            sample,
+            new VehicleInput(1.0f, 0.0f),
+            FixedTimeStep).State;
+
+        Assert.Equal(currentGear, state.CurrentGear);
+        Assert.Equal(nextGear, state.PendingGear);
+        Assert.True(state.ShiftTimeRemainingSeconds > 0.0f);
+    }
+
+    [Theory]
+    [InlineData(2, 1, 9.9f)]
+    [InlineData(3, 2, 21.9f)]
+    [InlineData(4, 3, 33.9f)]
+    [InlineData(5, 4, 41.9f)]
+    public void AutomaticDownshiftsFollowConfiguredRoadSpeeds(int currentGear, int nextGear, float kilometersPerHour)
+    {
+        VehicleDefinition definition = VehicleCatalog.FirstCar;
+        float roadSpeed = kilometersPerHour / 3.6f;
+        float wheelSpeed = roadSpeed / definition.Tires.WheelRadiusMeters;
+        VehicleSimulationState state = WithAllWheelSpeeds(
+            VehicleDynamics.CreateInitialState(definition) with
+            {
+                CurrentGear = currentGear,
+                PendingGear = currentGear,
+            },
+            wheelSpeed);
+        ChassisSample sample = new(VehicleMath.Forward(0.0f) * roadSpeed, 0.0f, 0.0f);
+
+        state = VehicleDynamics.Step(definition, state, sample, default, FixedTimeStep).State;
+
+        Assert.Equal(currentGear, state.CurrentGear);
+        Assert.Equal(nextGear, state.PendingGear);
+        Assert.True(state.ShiftTimeRemainingSeconds > 0.0f);
+    }
+
+    private static float ToKilometersPerHour(float metersPerSecond) =>
+        MathF.Round(metersPerSecond * 3.6f, 3);
 
     [Fact]
     public void ReverseEngagesOnlyNearRest()

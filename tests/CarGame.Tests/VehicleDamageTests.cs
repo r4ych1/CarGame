@@ -43,7 +43,7 @@ public sealed class VehicleDamageTests
     }
 
     [Fact]
-    public void MaximumDamageDisablesDriveButStillAllowsDetonationAndReset()
+    public void MaximumDamageDisablesDriveAndDetonationUntilReset()
     {
         using GameWorld world = new();
         world.Vehicle.ApplyCollisionDamage(28.0f);
@@ -60,11 +60,17 @@ public sealed class VehicleDamageTests
         Assert.Equal(0.0f, world.Vehicle.SpeedMetersPerSecond);
         Assert.True(world.Vehicle.DamageEffectAgeSeconds > 0.0f);
         world.ExplodeVehicle();
-        Assert.True(world.Vehicle.IsExploded);
+        world.Vehicle.Explode();
+        Assert.False(world.Vehicle.IsExploded);
+        Assert.Empty(world.Vehicle.ExplosionPieces);
+        Assert.Empty(world.Environment.BlastEffects);
+        Assert.Empty(world.Environment.Craters);
 
         world.ResetVehicle();
         Assert.Equal(0.0f, world.Vehicle.DamagePercent);
         Assert.False(world.Vehicle.IsDisabled);
+        world.ExplodeVehicle();
+        Assert.True(world.Vehicle.IsExploded);
     }
 
     [Fact]

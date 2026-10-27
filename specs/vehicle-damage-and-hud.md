@@ -15,12 +15,12 @@ avoiding guard fire, then present the essential driving state in a compact HUD.
   boundaries, and the playable perimeter do not damage the player car.
 - Each guard round that reaches the player car adds 8% damage.
 - At 100% damage the car is disabled and no longer responds to drive input. It
-  remains physical and can still be deliberately detonated with Space.
+  remains physical, but its detonator is also disabled and Space has no effect.
 - At 100% damage, dark smoke rises from the engine and the windshield shows
   visible cracks. The HUD does not add a disabled instruction message.
 - A translucent full-width bar at the bottom keeps speed fixed in the center.
-  Smaller RPM and Gear readouts are stacked at the left, and a right-side HP bar
-  provides the damage indicator without showing a numeric damage percentage.
+  A compact Gear readout sits at the left, and a right-side HP bar provides the
+  damage indicator without showing a numeric damage percentage. RPM is not shown.
   A separate translucent sidebar lists WASD / Arrows Drive,
   Mouse-wheel Zoom, Space Detonator, and R Reset.
 - Exploded and sunk states remain visible in the bottom status bar.
@@ -35,11 +35,13 @@ avoiding guard fire, then present the essential driving state in a compact HUD.
   4 m/s or below, up to 8 damage at 10 m/s, up to 35 damage at 18 m/s, and up
   to 70 damage at 28 m/s or above.
 - Damage is clamped to the inclusive range 0 to 100.
+- A disabled vehicle rejects detonation before creating vehicle fragments or an
+  environmental blast.
 - A guard round distinguishes a vehicle impact from an obstacle impact and
   applies bullet damage exactly once while its impact spark remains visible.
 - Simulation owns damage state; rendering only reads the resulting values.
-- HUD fields use fixed regions so changing RPM digits or gear does not shift the
-  speed readout or neighboring fields.
+- HUD fields use fixed regions so changing gear or speed text width does not
+  shift neighboring fields.
 
 ## Acceptance criteria
 
@@ -49,13 +51,12 @@ avoiding guard fire, then present the essential driving state in a compact HUD.
   not.
 - Repeated confirmed guard hits add 8% each without applying more than once per
   round.
-- Damage never exceeds 100%, reaching 100% prevents propulsion, and Space can
-  still detonate the disabled car.
+- Damage never exceeds 100%; reaching 100% prevents propulsion and detonation.
 - Reset clears damage and restores drive control.
 - The bottom HUD contains only the centered primary status fields plus an
   exploded or sunk status when applicable. Controls appear in the sidebar.
-- Speed remains visually fixed as RPM and gear change; RPM appears above Gear on
-  the left, and the right-side HP bar shrinks from full to empty with damage.
+- Speed remains visually fixed as gear changes; Gear appears alone on the left,
+  and the right-side HP bar shrinks from full to empty with damage.
 - A disabled intact car has engine smoke and windshield cracks but no disabled
   instruction text.
 - Tests, build, and formatting verification pass.
@@ -68,13 +69,13 @@ avoiding guard fire, then present the essential driving state in a compact HUD.
 3. Hit cones and guardrails at speed and confirm Damage does not change.
 4. Let guards hit the car and confirm Damage rises by 8% per visible hit.
 5. Reach 100% damage, confirm drive controls stop propelling the car, then press
-   Space and confirm the detonator still works.
+   Space and confirm no detonation, crater, or blast effect is created.
 6. Press R and confirm the car returns with 0% damage and working controls.
 7. Confirm the bottom status bar is translucent and centered, and the control
    sidebar contains all four requested control descriptions.
-8. Change speed and gears and confirm the HUD regions do not shift. Disable the
-   car and confirm the HP bar is empty, engine smoke and windshield cracks are
-   visible, and no disabled instruction text appears.
+8. Change speed and gears and confirm the HUD regions do not shift and no RPM
+   readout appears. Disable the car and confirm the HP bar is empty, engine smoke
+   and windshield cracks are visible, and no disabled instruction text appears.
 
 ## Non-goals
 

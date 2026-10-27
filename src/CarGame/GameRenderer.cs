@@ -5,8 +5,14 @@ namespace CarGame;
 
 internal sealed class GameRenderer
 {
-    private sealed class TireTrailSegment(Vector2 startMeters, Vector2 endMeters)
+    private sealed class TireTrailSegment(
+        object owner,
+        int tireIndex,
+        Vector2 startMeters,
+        Vector2 endMeters)
     {
+        public object Owner { get; } = owner;
+        public int TireIndex { get; } = tireIndex;
         public Vector2 StartMeters { get; } = startMeters;
         public Vector2 EndMeters { get; } = endMeters;
         public float AgeSeconds { get; set; }
@@ -20,6 +26,8 @@ internal sealed class GameRenderer
     private const float MaximumZoom = 1.35f;
     private const float ZoomStep = 1.12f;
     private const float ExplodedCameraSpeedMetersPerSecond = 28.0f;
+    private const float TireTrailFadeSeconds = 2.0f;
+    private const float MaximumTireTrailLengthMeters = 12.0f;
     private static readonly Vector2 GroundShadowDirection = Vector2.Normalize(new Vector2(0.65f, 1.0f));
     private readonly int screenWidth;
     private readonly int screenHeight;
@@ -123,7 +131,7 @@ internal sealed class GameRenderer
         for (int index = tireTrails.Count - 1; index >= 0; index--)
         {
             tireTrails[index].AgeSeconds += clampedElapsed;
-            if (tireTrails[index].AgeSeconds >= 3.5f)
+            if (tireTrails[index].AgeSeconds >= TireTrailFadeSeconds)
             {
                 tireTrails.RemoveAt(index);
             }
@@ -191,9 +199,33 @@ internal sealed class GameRenderer
             return;
         }
 
-        tireTrails.Add(new(previous.LeftMeters, current.LeftMeters));
-        tireTrails.Add(new(previous.RightMeters, current.RightMeters));
+        tireTrails.Add(new(key, 0, previous.LeftMeters, current.LeftMeters));
+        tireTrails.Add(new(key, 1, previous.RightMeters, current.RightMeters));
+        TrimTireTrail(key, 0);
+        TrimTireTrail(key, 1);
         tireSamples[key] = current;
+    }
+
+    private void TrimTireTrail(object owner, int tireIndex)
+    {
+        float retainedLengthMeters = 0.0f;
+        for (int index = tireTrails.Count - 1; index >= 0; index--)
+        {
+            TireTrailSegment trail = tireTrails[index];
+            if (!ReferenceEquals(trail.Owner, owner) || trail.TireIndex != tireIndex)
+            {
+                continue;
+            }
+
+            float segmentLengthMeters = Vector2.Distance(trail.StartMeters, trail.EndMeters);
+            if (retainedLengthMeters + segmentLengthMeters > MaximumTireTrailLengthMeters)
+            {
+                tireTrails.RemoveAt(index);
+                continue;
+            }
+
+            retainedLengthMeters += segmentLengthMeters;
+        }
     }
 
     private void DrawTireTrails()
@@ -201,7 +233,7 @@ internal sealed class GameRenderer
         float scale = SimulationUnits.PixelsPerMeter;
         foreach (TireTrailSegment trail in tireTrails)
         {
-            float opacity = Math.Clamp(1.0f - trail.AgeSeconds / 3.5f, 0.0f, 1.0f);
+            float opacity = Math.Clamp(1.0f - trail.AgeSeconds / TireTrailFadeSeconds, 0.0f, 1.0f);
             Raylib.DrawLineEx(
                 trail.StartMeters * scale,
                 trail.EndMeters * scale,
@@ -1449,8 +1481,7 @@ internal sealed class GameRenderer
         Raylib.DrawRectangle(0, bottomBarY, screenWidth, bottomBarHeight, new Color(10, 14, 13, 178));
 
         const int smallFontSize = 16;
-        Raylib.DrawText($"RPM  {state.EngineRevolutionsPerMinute,4:0}", 34, bottomBarY + 10, smallFontSize, Color.LightGray);
-        Raylib.DrawText($"GEAR {gear,4}", 34, bottomBarY + 38, smallFontSize, Color.LightGray);
+        Raylib.DrawText($"GEAR {gear,4}", 34, bottomBarY + 27, smallFontSize, Color.LightGray);
 
         string speedStatus = $"{speedKilometersPerHour:0} km/h";
         const int speedFontSize = 28;

@@ -36,8 +36,9 @@ checkpoint zigzag, and dirt bypass route.
 - Drivers treat persistent blast craters as impassable road hazards. A first car
   brakes to a stop before a crater instead of crossing or steering around it;
   following cars stop behind queued traffic to form a traffic jam.
-- Moving traffic leaves subtle paired tire trails that fade gradually, with tiny
-  rear-tire smoke puffs at higher speed.
+- Moving traffic leaves subtle paired tire trails capped at approximately 12
+  metres behind each rear tire and fading within two seconds, with tiny rear-tire
+  smoke puffs at higher speed.
 - Any meaningful collision below the disabling threshold preserves the impact
   motion for a 0.55-second driver-reaction window, allowing the car to be
   shoved sideways or fishtail. The driver then brakes progressively and stops

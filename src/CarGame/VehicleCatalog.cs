@@ -2,6 +2,8 @@ namespace CarGame;
 
 internal static class VehicleCatalog
 {
+    private const float KilometersPerHourToMetersPerSecond = 1.0f / 3.6f;
+
     public static VehicleDefinition FirstCar { get; } = new(
         "First Car",
         new ChassisSettings(
@@ -14,8 +16,8 @@ internal static class VehicleCatalog
             CenterOfGravityHeightMeters: 0.55f,
             MaximumForwardSpeedMetersPerSecond: 32.0f,
             MaximumReverseSpeedMetersPerSecond: 11.0f,
-            RollingResistanceNewtonsPerMeterPerSecond: 110.0f,
-            AerodynamicDragNewtonsPerSpeedSquared: 2.8f,
+            RollingResistanceNewtonsPerMeterPerSecond: 15.0f,
+            AerodynamicDragNewtonsPerSpeedSquared: 0.35f,
             MaximumSteeringAngleDegrees: 32.0f,
             HighSpeedSteeringScale: 0.45f,
             YawDampingPerSecond: 0.15f,
@@ -48,22 +50,34 @@ internal static class VehicleCatalog
             EngineBrakingTorqueNewtonMeters: 45.0f,
             TorqueCurve:
             [
-                new(850.0f, 125.0f),
-                new(2_000.0f, 175.0f),
-                new(3_500.0f, 205.0f),
-                new(5_000.0f, 195.0f),
-                new(6_500.0f, 150.0f),
+                new(850.0f, 150.0f),
+                new(2_000.0f, 210.0f),
+                new(3_500.0f, 245.0f),
+                new(5_000.0f, 235.0f),
+                new(6_500.0f, 180.0f),
             ]),
         new TransmissionSettings(
             ForwardRatios: [3.55f, 2.10f, 1.36f, 1.03f, 0.82f],
             ReverseRatio: 3.40f,
             FinalDriveRatio: 3.90f,
-            UpshiftRevolutionsPerMinute: 4_800.0f,
-            DownshiftRevolutionsPerMinute: 1_800.0f,
-            ShiftDurationSeconds: 0.14f,
+            UpshiftSpeedsMetersPerSecond:
+            [
+                15.0f * KilometersPerHourToMetersPerSecond,
+                28.0f * KilometersPerHourToMetersPerSecond,
+                40.0f * KilometersPerHourToMetersPerSecond,
+                48.0f * KilometersPerHourToMetersPerSecond,
+            ],
+            DownshiftSpeedsMetersPerSecond:
+            [
+                10.0f * KilometersPerHourToMetersPerSecond,
+                22.0f * KilometersPerHourToMetersPerSecond,
+                34.0f * KilometersPerHourToMetersPerSecond,
+                42.0f * KilometersPerHourToMetersPerSecond,
+            ],
+            ShiftDurationSeconds: 0.10f,
             DirectionSelectionSpeedMetersPerSecond: 0.5f),
         new BrakeSettings(
-            MaximumBrakingForceNewtons: 12_000.0f,
+            MaximumBrakingForceNewtons: 14_000.0f,
             FrontBias: 0.68f,
             AbsSlipThreshold: 0.15f,
             AbsReleaseThreshold: 0.08f,

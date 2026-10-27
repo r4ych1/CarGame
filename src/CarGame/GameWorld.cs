@@ -44,7 +44,7 @@ internal sealed class GameWorld : IDisposable
 
     public void ExplodeVehicle()
     {
-        if (!Vehicle.IsExploded && !Vehicle.IsSunk)
+        if (!Vehicle.IsExploded && !Vehicle.IsSunk && !Vehicle.IsDisabled)
         {
             Environment.Explode(Vehicle.PositionMeters);
             Vehicle.Explode();

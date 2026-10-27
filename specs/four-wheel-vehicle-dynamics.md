@@ -85,8 +85,8 @@ engine RPM, shift state, heave, roll, and pitch.
 ## Powertrain, direction selection, and braking
 
 - The engine uses a piecewise-linear torque curve, 850 RPM idle, 6,500 RPM
-  redline, automatic shift thresholds near 4,800/1,800 RPM, and explicit
-  closed-throttle engine-braking torque.
+  redline, speed-based automatic shift points, and explicit closed-throttle
+  engine-braking torque.
 - Forward ratios are 3.55, 2.10, 1.36, 1.03, and 0.82; final drive is 3.90 and
   reverse is 3.40. Driveline efficiency, wheel radius, and wheel inertia are
   explicit definition values.
@@ -94,12 +94,31 @@ engine RPM, shift state, heave, roll, and pitch.
   Engine speed follows average driven-wheel speed while remaining finite and
   between idle and redline.
 - Shifts are hysteretic, interrupt torque for a short deterministic interval,
-  and perform at most one gear transition per shift event.
-- The lower upshift threshold and 0.14-second shift interval let sustained
-  acceleration reach fifth gear earlier and with less delay.
+  and perform at most one gear transition per shift event. First Car upshifts at
+  approximately 15, 28, 40, and 48 km/h for the 1-2 through 4-5 changes. It
+  downshifts below approximately 10, 22, 34, and 42 km/h respectively, producing
+  useful overlapping ranges without gear hunting. Upshifts require forward
+  throttle so coasting does not interrupt engine braking.
+- The 0.10-second shift interval shortens the torque interruption and lets
+  sustained acceleration move quickly through the five-speed gearbox. Fourth
+  and fifth are intentionally reachable during
+  ordinary play around 40 and 48 km/h rather than being reserved for long,
+  unobstructed high-speed runs.
+- First Car's torque curve is tuned to 150-245 Nm through its usable range so
+  earlier upshifts do not make acceleration above 50 km/h feel stalled.
+- First Car has enough drive force to pass every configured upshift point under
+  sustained full throttle on level ground and reach fifth gear without external
+  assistance.
+- First Car uses 15 N per m/s of linear rolling resistance and 0.35 N per squared
+  m/s of aerodynamic drag. These prototype coefficients retain coast-down while
+  leaving enough high-speed wheel force to accelerate through fourth and fifth.
 - W requests forward drive except while braking a reversing car. S brakes a
   forward-moving car and selects reverse only near rest; W behaves symmetrically
   while reversing.
+- S uses 14 kN of available service-brake force for a more immediate response.
+  Holding it from road speed slows the car substantially before the existing
+  near-rest direction selector engages reverse, so one key still handles both
+  braking and backing up without an abrupt direction flip.
 - A direct service-brake input applies the brakes independently of the selected
   travel direction. Braking takes priority over simultaneous throttle input
   and does not select reverse. It has no keyboard binding in the prototype.
@@ -114,6 +133,8 @@ engine RPM, shift state, heave, roll, and pitch.
 - Each wheel has an independent always-enabled ABS modulator. It rapidly
   reduces brake pressure above about 15% braking slip, restores it more slowly
   below a release threshold, and bypasses modulation below about 1.5 m/s.
+  Fixed-step brake integration caps a commanded wheel-speed change at that slip
+  threshold so a strong S input cannot numerically jump straight into deep lock.
 
 ## Rendering and HUD
 
@@ -125,10 +146,12 @@ engine RPM, shift state, heave, roll, and pitch.
 - Render a subtle chassis-sized ground shadow cast down and right from the player
   car by the environment's implied upper-left light source.
 - The gameplay HUD replaces diagnostic wheel readouts with a translucent bottom
-  bar: speed is fixed at center, small RPM-over-Gear readouts occupy the left,
-  and a nonnumeric HP bar occupies the right. Controls use a separate sidebar.
-- Player and traffic tires leave subtle fading trails; tiny rear-tire smoke puffs
-  appear only at higher speed.
+  bar: speed is fixed at center, a compact Gear readout occupies the left, and a
+  nonnumeric HP bar occupies the right. RPM is omitted. Controls use a separate
+  sidebar.
+- Player and traffic tires leave subtle fading trails capped at approximately 12
+  metres behind each rear tire; tiny rear-tire smoke puffs appear only at higher
+  speed.
 
 ## Acceptance criteria
 
@@ -143,11 +166,18 @@ engine RPM, shift state, heave, roll, and pitch.
   peak, reflect load sensitivity, and lose lateral capacity under combined slip.
 - Wheel torque changes angular speed; the open differential gives equal front
   shaft torque.
-- Automatic shifts observe thresholds and hysteresis, perform one ratio change
-  per shift, and interrupt drive torque. Reverse engages only near rest and
-  engine RPM remains finite and bounded.
+- Automatic shifts occur near the configured 15/28/40/48 km/h upshift points and
+  10/22/34/42 km/h downshift points, perform one ratio change per shift, and
+  interrupt drive torque. Reverse engages only near rest and engine RPM remains
+  finite and bounded.
+- In an obstacle-free level simulation, sustained full throttle reaches fifth
+  gear within 12 seconds, exceeds 70 km/h, and continues accelerating rather
+  than becoming speed-limited in third.
 - Direct service-brake input slows a moving car through the existing four-wheel brake and ABS model
   without changing a forward gear into reverse.
+- Holding S from approximately 14 m/s reduces speed below 5 m/s within one
+  second, remains in a forward gear during that braking interval, and engages
+  reverse only after reaching the near-rest selection threshold.
 - With no pedal input, an in-gear moving car produces driven-wheel force that
   opposes travel and reduces speed more quickly than road resistance alone.
 - Coast-down reaches exactly zero linear and angular speed instead of retaining

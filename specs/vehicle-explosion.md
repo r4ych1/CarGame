@@ -9,7 +9,7 @@ outward explosion impulse.
 
 ## Player-visible behavior
 
-- Pressing Space while the car is intact immediately breaks it into six body
+- Pressing Space while the car is intact and operable immediately breaks it into six body
   panels, four wheels, an engine block, two bumpers, and six miscellaneous car
   fragments.
 - Every piece continues the velocity it had at its location on the moving and
@@ -19,6 +19,8 @@ outward explosion impulse.
 - After detonation, WASD and arrow keys pan the camera around the playable map
   at 28 metres per second instead of attempting to control the destroyed car.
 - Pressing Space again while exploded has no effect.
+- A car disabled by 100% damage cannot detonate; Space creates no fragments,
+  blast effects, crater, or environmental damage until reset.
 - Pressing R removes every explosion piece and restores the intact car at its
   initial pose and simulation state.
 - The controls sidebar identifies Space as the detonator and the bottom status
@@ -87,7 +89,8 @@ outward explosion impulse.
 
 ## Acceptance criteria
 
-- A detonation request transitions an intact vehicle to exploded exactly once.
+- A detonation request transitions an intact, operable vehicle to exploded
+  exactly once. Disabled and sunk vehicles reject the request.
 - Nineteen dynamic fragment bodies replace the intact rendering and have finite
   poses and velocities after simulation steps.
 - Exactly one engine block launches in the car's forward direction at no less
@@ -128,6 +131,7 @@ outward explosion impulse.
 3. Hold driving controls after detonation and confirm they do not propel the
    debris.
 4. Press Space repeatedly and confirm no extra debris appears.
+   Disable the reset car through damage, press Space, and confirm nothing explodes.
 5. Use WASD and the arrow keys after detonation; confirm the camera can inspect
    the map while the debris remains unaffected.
 6. Confirm the flash, expanding concussion ring, and debris streaks fade while

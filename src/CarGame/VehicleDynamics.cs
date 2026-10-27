@@ -257,6 +257,22 @@ internal static class VehicleDynamics
                 };
             }
 
+            if (braking &&
+                MathF.Abs(kinematics.LongitudinalSpeedMetersPerSecond) >=
+                    definition.Brakes.AbsMinimumSpeedMetersPerSecond)
+            {
+                float absLimitedAngularSpeed = rollingAngularSpeed *
+                    (1.0f - definition.Brakes.AbsSlipThreshold);
+                if (rollingAngularSpeed > 0.0f && nextAngularSpeed < absLimitedAngularSpeed)
+                {
+                    nextAngularSpeed = absLimitedAngularSpeed;
+                }
+                else if (rollingAngularSpeed < 0.0f && nextAngularSpeed > absLimitedAngularSpeed)
+                {
+                    nextAngularSpeed = absLimitedAngularSpeed;
+                }
+            }
+
             nextAngularSpeed = FiniteOrZero(Math.Clamp(nextAngularSpeed, -400.0f, 400.0f));
             float nextRotation = WrapAngle(wheelState.RotationRadians + (nextAngularSpeed * fixedTimeStep));
             WheelSimulationState nextWheel = wheelState with
@@ -485,12 +501,16 @@ internal static class VehicleDynamics
         float engineSpeed = CalculateEngineSpeed(definition, state.Wheels, gear);
         if (shiftTime <= 0.0f && gear > 0)
         {
-            if (engineSpeed >= transmission.UpshiftRevolutionsPerMinute && gear < transmission.ForwardRatios.Length)
+            float forwardSpeed = MathF.Abs(longitudinalSpeed);
+            if (input.Throttle > 0.0f &&
+                gear < transmission.ForwardRatios.Length &&
+                forwardSpeed >= transmission.UpshiftSpeedsMetersPerSecond[gear - 1])
             {
                 pendingGear = gear + 1;
                 shiftTime = transmission.ShiftDurationSeconds;
             }
-            else if (engineSpeed <= transmission.DownshiftRevolutionsPerMinute && gear > 1)
+            else if (gear > 1 &&
+                forwardSpeed <= transmission.DownshiftSpeedsMetersPerSecond[gear - 2])
             {
                 pendingGear = gear - 1;
                 shiftTime = transmission.ShiftDurationSeconds;

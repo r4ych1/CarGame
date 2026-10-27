@@ -1,5 +1,8 @@
 using System.Numerics;
+using Box2D.NET;
 using Xunit;
+using static Box2D.NET.B2Types;
+using static Box2D.NET.B2Worlds;
 
 namespace CarGame.Tests;
 
@@ -7,6 +10,45 @@ public sealed class VehiclePhysicsTests
 {
     private const float FixedTimeStep = 1.0f / 60.0f;
     private const int SubSteps = 4;
+
+    [Fact]
+    public void SustainedThrottleReachesFifthGearOnLevelGround()
+    {
+        B2WorldDef worldDefinition = b2DefaultWorldDef();
+        worldDefinition.gravity = default;
+        worldDefinition.enableSleep = false;
+        B2WorldId worldId = b2CreateWorld(worldDefinition);
+
+        try
+        {
+            Vehicle vehicle = new(worldId, VehicleCatalog.FirstCar);
+            int highestGear = 1;
+            int fifthGearStep = -1;
+            for (int index = 0; index < 1_800; index++)
+            {
+                vehicle.ApplyControls(new VehicleInput(1.0f, 0.0f), FixedTimeStep);
+                b2World_Step(worldId, FixedTimeStep, SubSteps);
+                highestGear = Math.Max(highestGear, vehicle.SimulationState.CurrentGear);
+                if (vehicle.SimulationState.CurrentGear == 5 && fifthGearStep < 0)
+                {
+                    fifthGearStep = index;
+                }
+            }
+
+            float finalSpeedKilometersPerHour = vehicle.SpeedMetersPerSecond * 3.6f;
+            Assert.True(
+                highestGear >= 5,
+                $"Highest gear was {highestGear} at {finalSpeedKilometersPerHour:0.0} km/h.");
+            Assert.InRange(fifthGearStep, 0, 719);
+            Assert.True(
+                finalSpeedKilometersPerHour >= 70.0f,
+                $"Final speed was only {finalSpeedKilometersPerHour:0.0} km/h.");
+        }
+        finally
+        {
+            b2DestroyWorld(worldId);
+        }
+    }
 
     [Fact]
     public void SteeringAloneDoesNotRotateStationaryVehicle()
@@ -58,32 +100,93 @@ public sealed class VehiclePhysicsTests
     [Fact]
     public void HardBrakingActivatesAbsAndSlowsWithoutSustainedLock()
     {
-        using GameWorld world = new();
-        Step(world, new VehicleInput(1.0f, 0.0f), 240);
-        float initialSpeed = world.Vehicle.SpeedMetersPerSecond;
-        bool sawAbs = false;
-        int consecutiveHighSpeedLockSteps = 0;
-        int longestHighSpeedLock = 0;
+        B2WorldDef worldDefinition = b2DefaultWorldDef();
+        worldDefinition.gravity = default;
+        worldDefinition.enableSleep = false;
+        B2WorldId worldId = b2CreateWorld(worldDefinition);
 
-        for (int index = 0; index < 180; index++)
+        try
         {
-            world.Step(new VehicleInput(-1.0f, 0.15f), FixedTimeStep, SubSteps);
-            sawAbs |= world.Vehicle.Diagnostics.AnyAbsIntervention;
-            float speed = world.Vehicle.SpeedMetersPerSecond;
-            float wheelSurfaceSpeed =
-                MathF.Abs(world.Vehicle.SimulationState.Wheels.FrontLeft.AngularSpeedRadiansPerSecond) *
-                VehicleCatalog.FirstCar.Tires.WheelRadiusMeters;
-            consecutiveHighSpeedLockSteps = speed > 3.0f && wheelSurfaceSpeed < speed * 0.1f
-                ? consecutiveHighSpeedLockSteps + 1
-                : 0;
-            longestHighSpeedLock = Math.Max(longestHighSpeedLock, consecutiveHighSpeedLockSteps);
-        }
+            Vehicle vehicle = new(worldId, VehicleCatalog.FirstCar);
+            for (int index = 0; index < 1_200 && vehicle.SpeedMetersPerSecond < 14.0f; index++)
+            {
+                vehicle.ApplyControls(new VehicleInput(1.0f, 0.0f), FixedTimeStep);
+                b2World_Step(worldId, FixedTimeStep, SubSteps);
+            }
+            float initialSpeed = vehicle.SpeedMetersPerSecond;
+            bool sawAbs = false;
+            int consecutiveHighSpeedLockSteps = 0;
+            int longestHighSpeedLock = 0;
 
-        Assert.True(initialSpeed > 2.0f);
-        Assert.True(sawAbs);
-        Assert.True(world.Vehicle.SpeedMetersPerSecond < initialSpeed);
-        Assert.True(longestHighSpeedLock < 15);
-        Assert.True(float.IsFinite(world.Vehicle.SimulationState.Wheels.FrontLeft.AngularSpeedRadiansPerSecond));
+            for (int index = 0; index < 180; index++)
+            {
+                vehicle.ApplyControls(new VehicleInput(-1.0f, 0.15f), FixedTimeStep);
+                b2World_Step(worldId, FixedTimeStep, SubSteps);
+                sawAbs |= vehicle.Diagnostics.AnyAbsIntervention;
+                float speed = vehicle.SpeedMetersPerSecond;
+                float wheelSurfaceSpeed =
+                    MathF.Abs(vehicle.SimulationState.Wheels.FrontLeft.AngularSpeedRadiansPerSecond) *
+                    VehicleCatalog.FirstCar.Tires.WheelRadiusMeters;
+                consecutiveHighSpeedLockSteps = speed > 3.0f && wheelSurfaceSpeed < speed * 0.1f
+                    ? consecutiveHighSpeedLockSteps + 1
+                    : 0;
+                longestHighSpeedLock = Math.Max(longestHighSpeedLock, consecutiveHighSpeedLockSteps);
+            }
+
+            Assert.True(initialSpeed >= 14.0f);
+            Assert.True(sawAbs, $"ABS did not intervene while braking from {initialSpeed:0.00} m/s.");
+            Assert.True(vehicle.SpeedMetersPerSecond < initialSpeed);
+            Assert.True(longestHighSpeedLock < 15);
+            Assert.True(float.IsFinite(vehicle.SimulationState.Wheels.FrontLeft.AngularSpeedRadiansPerSecond));
+        }
+        finally
+        {
+            b2DestroyWorld(worldId);
+        }
+    }
+
+    [Fact]
+    public void HoldingSBrakesPromptlyThenEngagesReverseNearRest()
+    {
+        B2WorldDef worldDefinition = b2DefaultWorldDef();
+        worldDefinition.gravity = default;
+        worldDefinition.enableSleep = false;
+        B2WorldId worldId = b2CreateWorld(worldDefinition);
+
+        try
+        {
+            Vehicle vehicle = new(worldId, VehicleCatalog.FirstCar);
+            for (int index = 0; index < 1_200 && vehicle.SpeedMetersPerSecond < 14.0f; index++)
+            {
+                vehicle.ApplyControls(new VehicleInput(1.0f, 0.0f), FixedTimeStep);
+                b2World_Step(worldId, FixedTimeStep, SubSteps);
+            }
+
+            for (int index = 0; index < 60; index++)
+            {
+                vehicle.ApplyControls(new VehicleInput(-1.0f, 0.0f), FixedTimeStep);
+                b2World_Step(worldId, FixedTimeStep, SubSteps);
+            }
+
+            Assert.True(
+                vehicle.SpeedMetersPerSecond < 5.0f,
+                $"Speed remained {vehicle.SpeedMetersPerSecond:0.00} m/s after one second of S braking.");
+            Assert.True(
+                vehicle.SimulationState.CurrentGear > 0,
+                $"Reverse engaged early in gear {vehicle.SimulationState.CurrentGear}.");
+
+            for (int index = 0; index < 180 && vehicle.SimulationState.CurrentGear > 0; index++)
+            {
+                vehicle.ApplyControls(new VehicleInput(-1.0f, 0.0f), FixedTimeStep);
+                b2World_Step(worldId, FixedTimeStep, SubSteps);
+            }
+
+            Assert.Equal(-1, vehicle.SimulationState.CurrentGear);
+        }
+        finally
+        {
+            b2DestroyWorld(worldId);
+        }
     }
 
     [Fact]
