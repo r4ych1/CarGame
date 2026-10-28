@@ -1654,14 +1654,11 @@ internal sealed class GameRenderer
             return;
         }
 
-        int panelAlpha = (int)(145.0f * opacity);
         int textAlpha = (int)(255.0f * opacity);
 
         const int panelWidth = 760;
-        const int panelHeight = 690;
         int panelX = (screenWidth - panelWidth) / 2;
-        int panelY = (screenHeight - panelHeight) / 2;
-        Raylib.DrawRectangle(panelX, panelY, panelWidth, panelHeight, new Color(15, 20, 19, panelAlpha));
+        int panelY = (screenHeight - 690) / 2;
 
         Color primary = new(245, 239, 221, textAlpha);
         Color secondary = new(194, 201, 195, textAlpha);
@@ -1693,7 +1690,7 @@ internal sealed class GameRenderer
         int valueRightX = panelX + 555;
         int subtotalRightX = panelX + 710;
         int headerY = panelY + 96;
-        Raylib.DrawText("EVENT", eventX, headerY, 16, secondary);
+        DrawShadowedText("EVENT", eventX, headerY, 16, secondary);
         DrawRightAlignedText("COUNT", countRightX, headerY, 16, secondary);
         DrawRightAlignedText("EACH", valueRightX, headerY, 16, secondary);
         DrawRightAlignedText("POINTS", subtotalRightX, headerY, 16, secondary);
@@ -1702,7 +1699,7 @@ internal sealed class GameRenderer
         int rowY = headerY + 30;
         foreach ((string label, int count, int value) in rows)
         {
-            Raylib.DrawText(label, eventX, rowY, 17, primary);
+            DrawShadowedText(label, eventX, rowY, 17, primary);
             DrawRightAlignedText(count.ToString(), countRightX, rowY, 17, primary);
             DrawRightAlignedText($"{value:N0}", valueRightX, rowY, 17, secondary);
             DrawRightAlignedText($"{count * value:N0}", subtotalRightX, rowY, 17, primary);
@@ -1719,12 +1716,19 @@ internal sealed class GameRenderer
 
     private static void DrawRightAlignedText(string text, int rightX, int y, int fontSize, Color color)
     {
-        Raylib.DrawText(text, rightX - Raylib.MeasureText(text, fontSize), y, fontSize, color);
+        DrawShadowedText(text, rightX - Raylib.MeasureText(text, fontSize), y, fontSize, color);
     }
 
     private void DrawCenteredText(string text, int y, int fontSize, Color color)
     {
         int x = (screenWidth - Raylib.MeasureText(text, fontSize)) / 2;
+        DrawShadowedText(text, x, y, fontSize, color);
+    }
+
+    private static void DrawShadowedText(string text, int x, int y, int fontSize, Color color)
+    {
+        Color shadow = new(0, 0, 0, (int)(color.A * 0.82f));
+        Raylib.DrawText(text, x + 2, y + 2, fontSize, shadow);
         Raylib.DrawText(text, x, y, fontSize, color);
     }
 

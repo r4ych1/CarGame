@@ -14,8 +14,9 @@ summary after the player vehicle is disabled or deliberately exploded.
   detonator is activated. The timer and top-speed record freeze at that moment.
 - Three seconds after the run ends, a full-screen game-over overlay begins a
   one-second fade-in over the still-visible game world. It does not darken the
-  full screen or draw a border; only a lightly translucent table surface sits
-  behind the summary text so the game remains visible through and around it.
+  full screen, draw a border, or place a panel behind the summary. The table
+  text floats directly over the game world with a subtle dark shadow for
+  contrast.
 - Gameplay HUD elements begin fading out immediately when the run ends and are
   fully hidden after 0.35 seconds. This is independent of the delayed results
   table. The exploded state does not show a reset prompt on the gameplay HUD;
@@ -63,7 +64,7 @@ prop without destroying it does not award points.
   already damaged/destroyed scenery object cannot score twice.
 - The game-over overlay delay is three simulated seconds and its fade duration is
   one simulated second.
-- Overlay opacity applies to the results table and text, not to a full-screen
+- Overlay opacity applies to the results table text and its shadow, with no
   backdrop. The HUD has an independent 0.35-second fade duration beginning at
   the instant the run ends.
 
@@ -96,8 +97,8 @@ prop without destroying it does not award points.
 4. After detonation, hold WASD and arrow keys and confirm the camera does not pan.
 5. Confirm the timer stops and the gameplay HUD begins fading immediately, no
    overlay is visible for three seconds, and the game-over summary then fades in
-   with the total score and statistics. Confirm the world remains visible
-   without a dark full-screen fade or border.
+   with the total score and statistics. Confirm the world remains unobstructed
+   behind shadowed text, without a panel, dark full-screen fade, or border.
 6. Reach 100% vehicle damage and confirm the disabled reason produces the same
    delayed summary without an explosion.
 7. Press R and confirm score, timer, top speed, damage summary, and overlay reset.
