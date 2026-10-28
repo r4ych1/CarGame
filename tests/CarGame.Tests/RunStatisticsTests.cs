@@ -35,7 +35,7 @@ public sealed class RunStatisticsTests
     }
 
     [Fact]
-    public void TimerStopsAndOverlayFadesAfterFiveSecondDelay()
+    public void TimerStopsAndOverlayIsFullyVisibleAfterFourSeconds()
     {
         using GameWorld world = new();
         world.Step(default, FixedTimeStep, 4);
@@ -48,7 +48,7 @@ public sealed class RunStatisticsTests
         Assert.Equal(GameOverReason.Disabled, world.RunStatistics.EndReason);
         Assert.Equal(100.0f, world.RunStatistics.DamageTakenPercent);
 
-        for (int index = 0; index < 300; index++)
+        for (int index = 0; index < 180; index++)
         {
             world.Step(default, FixedTimeStep, 4);
         }

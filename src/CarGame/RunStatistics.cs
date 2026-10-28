@@ -30,7 +30,7 @@ internal sealed class RunStatistics
     internal const int DamagedStructurePoints = 10;
     internal const int DestroyedStructurePoints = 50;
     internal const int DestroyedSceneryPoints = 5;
-    internal const float OverlayDelaySeconds = 5.0f;
+    internal const float OverlayDelaySeconds = 3.0f;
     internal const float OverlayFadeSeconds = 1.0f;
     internal const float HudFadeSeconds = 0.35f;
 

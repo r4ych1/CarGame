@@ -12,7 +12,7 @@ summary after the player vehicle is disabled or deliberately exploded.
   withheld until the game-over summary.
 - The run ends immediately when the player vehicle reaches 100% damage or its
   detonator is activated. The timer and top-speed record freeze at that moment.
-- Five seconds after the run ends, a full-screen game-over overlay begins a
+- Three seconds after the run ends, a full-screen game-over overlay begins a
   one-second fade-in over the still-visible game world. It does not darken the
   full screen or draw a border; only a lightly translucent table surface sits
   behind the summary text so the game remains visible through and around it.
@@ -61,7 +61,7 @@ prop without destroying it does not award points.
   terminal detonation are included in the displayed total.
 - Score awards are based on state transitions so an already dead person or an
   already damaged/destroyed scenery object cannot score twice.
-- The game-over overlay delay is five simulated seconds and its fade duration is
+- The game-over overlay delay is three simulated seconds and its fade duration is
   one simulated second.
 - Overlay opacity applies to the results table and text, not to a full-screen
   backdrop. The HUD has an independent 0.35-second fade duration beginning at
@@ -77,7 +77,7 @@ prop without destroying it does not award points.
 - Player run-overs score once; traffic-caused deaths do not score.
 - Top speed never decreases during a run and freezes at game over.
 - The bottom bar shows time at left but no score. The overlay is invisible before
-  five seconds of game-over time, fades to full visibility over the following
+  three seconds of game-over time, fades to full visibility over the following
   second, and reports every score category in a table plus total score, damage
   taken, top speed, run time, and the terminal reason. The gameplay HUD begins
   fading immediately after either disable or detonation and is hidden well
@@ -95,7 +95,7 @@ prop without destroying it does not award points.
    and environmental destruction.
 4. After detonation, hold WASD and arrow keys and confirm the camera does not pan.
 5. Confirm the timer stops and the gameplay HUD begins fading immediately, no
-   overlay is visible for five seconds, and the game-over summary then fades in
+   overlay is visible for three seconds, and the game-over summary then fades in
    with the total score and statistics. Confirm the world remains visible
    without a dark full-screen fade or border.
 6. Reach 100% vehicle damage and confirm the disabled reason produces the same

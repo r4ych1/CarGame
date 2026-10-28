@@ -108,11 +108,6 @@ internal sealed class Vehicle
     {
         if (IsExploded)
         {
-            foreach (ExplosionPiece piece in explosionPieces)
-            {
-                piece.ApplyGroundResistance(fixedTimeStep);
-            }
-
             return;
         }
 
@@ -157,6 +152,19 @@ internal sealed class Vehicle
         ApplyYawDamping();
         SimulationState = result.State;
         Diagnostics = result.Diagnostics;
+    }
+
+    public void ApplyPostPhysicsEffects(float fixedTimeStep)
+    {
+        if (!IsExploded)
+        {
+            return;
+        }
+
+        foreach (ExplosionPiece piece in explosionPieces)
+        {
+            piece.ApplyGroundResistance(fixedTimeStep);
+        }
     }
 
     private bool ShouldSettleAtRest(VehicleInput input, B2Vec2 velocity, float angularVelocity)
@@ -319,23 +327,23 @@ internal sealed class Vehicle
         return
         [
             new(ExplosionPieceKind.BodyPanel, new(-side, -end), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, -0.20f, -2.8f),
-            new(ExplosionPieceKind.BodyPanel, new(side, -end), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, 0.18f, 2.5f),
+            new(ExplosionPieceKind.BodyPanel, new(side, -end), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, 0.18f, 0.0f),
             new(ExplosionPieceKind.BodyPanel, new(-side, 0.0f), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, 0.12f, 3.2f),
-            new(ExplosionPieceKind.BodyPanel, new(side, 0.0f), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, -0.15f, -3.4f),
+            new(ExplosionPieceKind.BodyPanel, new(side, 0.0f), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, -0.15f, 0.0f),
             new(ExplosionPieceKind.BodyPanel, new(-side, end), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, 0.22f, 2.2f),
-            new(ExplosionPieceKind.BodyPanel, new(side, end), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, -0.18f, -2.6f),
+            new(ExplosionPieceKind.BodyPanel, new(side, end), new(bodyWidth, bodyLength), bodyPieceMass, 1.0f, -0.18f, 0.0f),
             new(ExplosionPieceKind.Wheel, new(-wheelX, -wheelY), new(0.34f, 0.78f), wheelPieceMass, 1.0f, -0.25f, -5.0f),
-            new(ExplosionPieceKind.Wheel, new(wheelX, -wheelY), new(0.34f, 0.78f), wheelPieceMass, 1.0f, 0.25f, 5.4f),
+            new(ExplosionPieceKind.Wheel, new(wheelX, -wheelY), new(0.34f, 0.78f), wheelPieceMass, 1.0f, 0.25f, 0.0f),
             new(ExplosionPieceKind.Wheel, new(-wheelX, wheelY), new(0.34f, 0.78f), wheelPieceMass, 1.0f, 0.28f, 4.6f),
-            new(ExplosionPieceKind.Wheel, new(wheelX, wheelY), new(0.34f, 0.78f), wheelPieceMass, 1.0f, -0.28f, -5.2f),
+            new(ExplosionPieceKind.Wheel, new(wheelX, wheelY), new(0.34f, 0.78f), wheelPieceMass, 1.0f, -0.28f, 0.0f),
             new(ExplosionPieceKind.EngineBlock, new(0.0f, -chassis.LengthMeters * 0.18f), new(1.10f, 0.95f), engineMass, 2.5f, 0.04f, 1.4f),
-            new(ExplosionPieceKind.Bumper, new(0.0f, -chassis.LengthMeters * 0.47f), new(chassis.WidthMeters * 0.88f, 0.24f), bumperMass, 1.35f, -0.18f, -4.4f),
+            new(ExplosionPieceKind.Bumper, new(0.0f, -chassis.LengthMeters * 0.47f), new(chassis.WidthMeters * 0.88f, 0.24f), bumperMass, 1.35f, -0.18f, 0.0f),
             new(ExplosionPieceKind.Bumper, new(0.0f, chassis.LengthMeters * 0.47f), new(chassis.WidthMeters * 0.88f, 0.24f), bumperMass, 1.25f, 0.16f, 4.0f),
-            new(ExplosionPieceKind.MiscellaneousDebris, new(-side * 0.55f, -end * 0.62f), new(0.28f, 0.42f), miscellaneousPieceMass, 1.25f, -0.34f, -7.0f),
+            new(ExplosionPieceKind.MiscellaneousDebris, new(-side * 0.55f, -end * 0.62f), new(0.28f, 0.42f), miscellaneousPieceMass, 1.25f, -0.34f, 0.0f),
             new(ExplosionPieceKind.MiscellaneousDebris, new(side * 0.72f, -end * 0.48f), new(0.22f, 0.36f), miscellaneousPieceMass, 1.30f, 0.38f, 7.8f),
-            new(ExplosionPieceKind.MiscellaneousDebris, new(-side * 0.82f, -0.12f), new(0.18f, 0.30f), miscellaneousPieceMass, 1.18f, 0.42f, 8.6f),
+            new(ExplosionPieceKind.MiscellaneousDebris, new(-side * 0.82f, -0.12f), new(0.18f, 0.30f), miscellaneousPieceMass, 1.18f, 0.42f, 0.0f),
             new(ExplosionPieceKind.MiscellaneousDebris, new(side * 0.64f, 0.16f), new(0.32f, 0.20f), miscellaneousPieceMass, 1.22f, -0.40f, -8.2f),
-            new(ExplosionPieceKind.MiscellaneousDebris, new(-side * 0.68f, end * 0.55f), new(0.24f, 0.34f), miscellaneousPieceMass, 1.28f, -0.30f, -7.5f),
+            new(ExplosionPieceKind.MiscellaneousDebris, new(-side * 0.68f, end * 0.55f), new(0.24f, 0.34f), miscellaneousPieceMass, 1.28f, -0.30f, 0.0f),
             new(ExplosionPieceKind.MiscellaneousDebris, new(side * 0.78f, end * 0.68f), new(0.20f, 0.27f), miscellaneousPieceMass, 1.20f, 0.36f, 8.0f),
         ];
     }

@@ -34,6 +34,7 @@ internal sealed class GameWorld : IDisposable
         }
         Environment.Step(fixedTimeStep, Vehicle);
         b2World_Step(worldId, fixedTimeStep, subSteps);
+        Vehicle.ApplyPostPhysicsEffects(fixedTimeStep);
         ApplyVehicleCollisionDamage();
         ScoreAwards collisionAwards = Environment.PostPhysicsStep(Vehicle);
         RunStatistics.Award(collisionAwards);

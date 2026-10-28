@@ -19,6 +19,8 @@ checkpoint zigzag, and dirt bypass route.
 - Traffic cars collide with the player, props, scenery, and one another.
 - Each traffic car has a subtle ground shadow matching its body pose and cast
   down and right by the environment's implied upper-left light source.
+- Moving traffic cars and parked cars or trucks have small black side-view
+  mirrors on both sides, positioned toward the engine end of the front cabin.
 - Drivers use bounded throttle force and steering torque rather than directly
   forcing pose or velocity. A nudge can push a car off line and change its
   heading; an undamaged driver then makes gradual corrections toward upcoming

@@ -62,7 +62,10 @@ outward explosion impulse.
   applied radial impulse to about 32,700 N s. The blast is intentionally much
   stronger than ordinary driving speed so every side of the car visibly erupts
   away from the center. A small, fixed tangential component prevents a perfectly
-  symmetric burst, and each piece receives deterministic angular velocity.
+  symmetric burst. Ten alternating pieces receive distinct deterministic added
+  angular velocities so they tumble while being pushed outward; the other nine
+  receive no added spin, avoiding a uniform spinning-top appearance. All pieces
+  still inherit any angular motion carried by the intact car.
 - The engine block begins near the front-center of the chassis and receives a
   2.5-times impulse multiplier, launching it forward at 45 m/s from a stationary
   car. Bumpers and smaller mechanical fragments use fixed layouts and distinct
@@ -72,7 +75,10 @@ outward explosion impulse.
   an explicit Coulomb-like ground deceleration of 0.75 g (7.36 m/s squared)
   every fixed step. Mild Box2D damping supplements that surface resistance, so
   pieces burst violently and then lose speed on the ground instead of coasting
-  like objects in space.
+  like objects in space. Explicit rotational resistance also reduces angular
+  speed by 12 radians per second squared and stops rotation once a piece moves
+  below 1 metre per second, preventing settled body panels from spinning like
+  tops.
 - Rendering uses code-drawn rectangles and circles; no generated asset is
   required.
 - The flash lasts 0.25 seconds, glowing debris lasts up to 3 seconds, and the
@@ -97,11 +103,14 @@ outward explosion impulse.
   than 44 m/s from rest, and the additional bumpers and miscellaneous fragments
   are visibly distinct from panels and wheels.
 - Explosion motion is reproducible from the same initial vehicle state.
+- From a stationary, non-rotating car, exactly 10 fragments begin with spin and
+  9 begin without spin while all continue moving away from the blast center.
 - A moving or rotating car transfers its pre-explosion motion to the pieces.
 - At least one piece moves away from the blast center in every cardinal local
   direction.
 - From rest, every piece initially has at least 18 m/s of radial outward
   velocity and subsequently loses speed from ground resistance.
+- Fragment spin settles to zero as outward movement comes to rest.
 - Controls no longer accelerate or steer the car after detonation.
 - WASD and arrow keys do not move the camera after detonation.
 - Reset destroys the fragments, restores the intact car, and permits another

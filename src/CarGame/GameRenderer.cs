@@ -27,6 +27,11 @@ internal sealed class GameRenderer
     private const float ZoomStep = 1.12f;
     private const float TireTrailFadeSeconds = 2.0f;
     private const float MaximumTireTrailLengthMeters = 12.0f;
+    private const float MissionDismissSpeedMetersPerSecond = 0.5f;
+    private const float MissionFadeSeconds = 0.75f;
+    private const string MissionLineOne = "Advance up the main road to the";
+    private const string MissionLineTwo = "enemy base and complete the mission.";
+    private const string MissionLineThree = "Watch out for the checkpoint.";
     private static readonly Vector2 GroundShadowDirection = Vector2.Normalize(new Vector2(0.65f, 1.0f));
     private readonly int screenWidth;
     private readonly int screenHeight;
@@ -35,6 +40,8 @@ internal sealed class GameRenderer
     private readonly List<TireTrailSegment> tireTrails = [];
     private Vector2 cameraTarget;
     private bool wasExploded;
+    private bool missionDismissed;
+    private float missionOpacity = 1.0f;
     private float zoom = 0.5f;
 
     public GameRenderer(int screenWidth, int screenHeight)
@@ -49,6 +56,7 @@ internal sealed class GameRenderer
         UpdateZoom(Raylib.GetMouseWheelMove());
         UpdateTireTrails(world, elapsedSeconds);
         Vehicle vehicle = world.Vehicle;
+        UpdateMissionBriefing(vehicle.SpeedMetersPerSecond, elapsedSeconds);
         Camera2D camera = new()
         {
             Target = cameraTarget,
@@ -78,11 +86,14 @@ internal sealed class GameRenderer
 
     internal float Zoom => zoom;
     internal Vector2 CameraTarget => cameraTarget;
+    internal float MissionOpacity => missionOpacity;
 
     internal void ResetVisualEffects()
     {
         tireSamples.Clear();
         tireTrails.Clear();
+        missionDismissed = false;
+        missionOpacity = 1.0f;
     }
 
     internal void UpdateCamera(Vehicle vehicle)
@@ -110,6 +121,22 @@ internal sealed class GameRenderer
 
         zoom *= MathF.Pow(ZoomStep, wheelMovement);
         zoom = Math.Clamp(zoom, MinimumZoom, MaximumZoom);
+    }
+
+    internal void UpdateMissionBriefing(float speedMetersPerSecond, float elapsedSeconds)
+    {
+        if (speedMetersPerSecond > MissionDismissSpeedMetersPerSecond)
+        {
+            missionDismissed = true;
+        }
+
+        if (!missionDismissed)
+        {
+            return;
+        }
+
+        float fadeStep = Math.Clamp(elapsedSeconds, 0.0f, 0.25f) / MissionFadeSeconds;
+        missionOpacity = MathF.Max(0.0f, missionOpacity - fadeStep);
     }
 
     private void UpdateTireTrails(GameWorld world, float elapsedSeconds)
@@ -659,6 +686,7 @@ internal sealed class GameRenderer
             GroundShadowDirection * (0.20f * scale),
             1.10f,
             92);
+        DrawSideViewMirrors(center, size, vehicle.RotationRadians);
         Raylib.DrawRectanglePro(
             new Rectangle(center.X, center.Y, size.X, size.Y),
             size * 0.5f,
@@ -1190,6 +1218,10 @@ internal sealed class GameRenderer
             SceneryKind.ParkedTruck => new(142, 137, 119, 255),
             _ => new(104, 105, 99, 255),
         };
+        if (kind is SceneryKind.ParkedCar or SceneryKind.ParkedTruck)
+        {
+            DrawSideViewMirrors(center, size, rotation);
+        }
         Raylib.DrawRectanglePro(new Rectangle(center.X, center.Y, size.X, size.Y), size * 0.5f, rotationDegrees, fill);
         if (kind == SceneryKind.Building)
         {
@@ -1381,6 +1413,10 @@ internal sealed class GameRenderer
             1.11f,
             96);
         DrawWheels(vehicle, rotationDegrees);
+        DrawSideViewMirrors(
+            visualCenter,
+            new Vector2(width, length),
+            vehicle.RotationRadians);
         Raylib.DrawRectanglePro(body, origin, rotationDegrees,
             vehicle.IsSunk ? new Color(91, 103, 101, 255) : new Color(218, 69, 57, 255));
         Raylib.DrawRectanglePro(
@@ -1532,6 +1568,82 @@ internal sealed class GameRenderer
         Raylib.DrawText("Space   Detonator", sidebarX + 16, sidebarY + 92, 17, hudLight);
         Raylib.DrawText("R   Reset", sidebarX + 16, sidebarY + 116, 17, hudLight);
 
+        DrawMissionBriefing(opacity * missionOpacity);
+    }
+
+    private static void DrawSideViewMirrors(
+        Vector2 center,
+        Vector2 vehicleSize,
+        float rotationRadians)
+    {
+        float scale = SimulationUnits.PixelsPerMeter;
+        Vector2 forward = VehicleMath.Forward(rotationRadians);
+        Vector2 right = VehicleMath.Right(rotationRadians);
+        Vector2 cabinPosition = center + forward * vehicleSize.Y * 0.20f;
+        float rotationDegrees = rotationRadians * 180.0f / MathF.PI;
+        Vector2 mirrorSize = new(0.30f * scale, 0.18f * scale);
+        Color mirrorBlack = new(16, 18, 18, 255);
+        Color highlight = new(48, 52, 51, 255);
+
+        foreach (float side in new[] { -1.0f, 1.0f })
+        {
+            Vector2 bodyEdge = cabinPosition + right * side * vehicleSize.X * 0.48f;
+            Vector2 mirrorCenter = cabinPosition + right * side * (vehicleSize.X * 0.5f + mirrorSize.X * 0.42f);
+            Raylib.DrawLineEx(bodyEdge, mirrorCenter, 0.08f * scale, mirrorBlack);
+            Raylib.DrawRectanglePro(
+                new Rectangle(mirrorCenter.X, mirrorCenter.Y, mirrorSize.X, mirrorSize.Y),
+                mirrorSize * 0.5f,
+                rotationDegrees,
+                mirrorBlack);
+            Raylib.DrawLineEx(
+                mirrorCenter - forward * mirrorSize.Y * 0.28f,
+                mirrorCenter + forward * mirrorSize.Y * 0.28f,
+                0.07f * scale,
+                highlight);
+        }
+    }
+
+    private static void DrawMissionBriefing(float opacity)
+    {
+        const int panelX = 18;
+        const int panelY = 18;
+        const int panelWidth = 510;
+        const int panelHeight = 148;
+        const int radioX = panelX + 20;
+        const int radioY = panelY + 25;
+        const int textX = panelX + 122;
+
+        Color panel = WithOpacity(new Color(10, 14, 13, 188), opacity);
+        Color radioBody = WithOpacity(new Color(59, 67, 61, 255), opacity);
+        Color radioEdge = WithOpacity(new Color(132, 142, 134, 255), opacity);
+        Color radioDark = WithOpacity(new Color(20, 25, 22, 255), opacity);
+        Color display = WithOpacity(new Color(132, 174, 137, 255), opacity);
+        Color heading = WithOpacity(new Color(235, 151, 66, 255), opacity);
+        Color text = WithOpacity(new Color(225, 229, 222, 255), opacity);
+
+        Raylib.DrawRectangle(panelX, panelY, panelWidth, panelHeight, panel);
+        Raylib.DrawRectangleLines(panelX, panelY, panelWidth, panelHeight, WithOpacity(new Color(82, 91, 85, 210), opacity));
+
+        // The asymmetrical silhouette and visible controls keep the small icon readable as a radio.
+        Raylib.DrawLineEx(new Vector2(radioX + 18, radioY + 5), new Vector2(radioX + 10, radioY - 20), 5.0f, radioDark);
+        Raylib.DrawCircle(radioX + 70, radioY + 2, 7.0f, radioDark);
+        Raylib.DrawRectangle(radioX + 4, radioY, 74, 103, radioBody);
+        Raylib.DrawRectangleLines(radioX + 4, radioY, 74, 103, radioEdge);
+        Raylib.DrawRectangle(radioX + 16, radioY + 13, 50, 22, radioDark);
+        Raylib.DrawRectangle(radioX + 21, radioY + 18, 40, 12, display);
+        for (int speakerLine = 0; speakerLine < 4; speakerLine++)
+        {
+            int lineY = radioY + 48 + speakerLine * 8;
+            Raylib.DrawLine(radioX + 18, lineY, radioX + 64, lineY, radioDark);
+        }
+
+        Raylib.DrawCircle(radioX + 26, radioY + 89, 7.0f, radioDark);
+        Raylib.DrawCircle(radioX + 56, radioY + 89, 7.0f, radioDark);
+
+        Raylib.DrawText("MISSION", textX, panelY + 17, 20, heading);
+        Raylib.DrawText(MissionLineOne, textX, panelY + 49, 17, text);
+        Raylib.DrawText(MissionLineTwo, textX, panelY + 73, 17, text);
+        Raylib.DrawText(MissionLineThree, textX, panelY + 105, 17, heading);
     }
 
     private void DrawGameOverOverlay(RunStatistics run)

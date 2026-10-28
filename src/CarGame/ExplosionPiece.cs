@@ -20,6 +20,8 @@ internal enum ExplosionPieceKind
 internal sealed class ExplosionPiece
 {
     private const float GroundDecelerationMetersPerSecondSquared = 7.36f;
+    private const float GroundAngularDecelerationRadiansPerSecondSquared = 12.0f;
+    private const float StopSpinningSpeedMetersPerSecond = 1.0f;
     private readonly B2BodyId bodyId;
 
     public ExplosionPiece(
@@ -93,6 +95,8 @@ internal sealed class ExplosionPiece
 
     public float RotationRadians => b2Rot_GetAngle(b2Body_GetRotation(bodyId));
 
+    public float AngularVelocityRadiansPerSecond => b2Body_GetAngularVelocity(bodyId);
+
     public void ApplyGroundResistance(float fixedTimeStep)
     {
         B2Vec2 velocityValue = b2Body_GetLinearVelocity(bodyId);
@@ -100,6 +104,7 @@ internal sealed class ExplosionPiece
         float speed = velocity.Length();
         if (speed <= 0.0f)
         {
+            b2Body_SetAngularVelocity(bodyId, 0.0f);
             return;
         }
 
@@ -108,6 +113,18 @@ internal sealed class ExplosionPiece
             speed - (GroundDecelerationMetersPerSecondSquared * fixedTimeStep));
         Vector2 reducedVelocity = velocity * (reducedSpeed / speed);
         b2Body_SetLinearVelocity(bodyId, new B2Vec2(reducedVelocity.X, reducedVelocity.Y));
+
+        float angularVelocity = b2Body_GetAngularVelocity(bodyId);
+        if (reducedSpeed <= StopSpinningSpeedMetersPerSecond)
+        {
+            b2Body_SetAngularVelocity(bodyId, 0.0f);
+            return;
+        }
+
+        float reducedAngularSpeed = MathF.Max(
+            0.0f,
+            MathF.Abs(angularVelocity) - GroundAngularDecelerationRadiansPerSecondSquared * fixedTimeStep);
+        b2Body_SetAngularVelocity(bodyId, MathF.CopySign(reducedAngularSpeed, angularVelocity));
     }
 
     public void Destroy() => b2DestroyBody(bodyId);

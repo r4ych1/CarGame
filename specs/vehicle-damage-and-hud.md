@@ -26,6 +26,8 @@ avoiding guard fire, then present the essential driving state in a compact HUD.
   HUD fades out over 0.35 seconds, before the delayed game-over table appears.
   A separate translucent sidebar lists WASD / Arrows Drive,
   Mouse-wheel Zoom, Space Detonator, and R Reset.
+- The player car has small black side-view mirrors protruding beside the front
+  cabin, positioned toward the engine end of the cabin.
 - Exploded and sunk states remain visible in the bottom status bar.
 - Reaching 100% damage ends the current run. The delayed game-over summary and
   run statistics are specified in `game-over-and-scoring.md`.
@@ -66,6 +68,7 @@ avoiding guard fire, then present the essential driving state in a compact HUD.
   empty with damage.
 - A disabled intact car has engine smoke and windshield cracks but no disabled
   instruction text.
+- The player car's side-view mirrors remain visually distinct from its body.
 - Tests, build, and formatting verification pass.
 
 ## Manual verification

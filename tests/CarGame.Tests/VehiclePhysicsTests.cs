@@ -282,6 +282,19 @@ public sealed class VehiclePhysicsTests
     }
 
     [Fact]
+    public void ExplosionAddsSpinToTenOfNineteenPieces()
+    {
+        using GameWorld world = new();
+
+        world.ExplodeVehicle();
+
+        Assert.Equal(10, world.Vehicle.ExplosionPieces.Count(piece =>
+            MathF.Abs(piece.AngularVelocityRadiansPerSecond) > 0.001f));
+        Assert.Equal(9, world.Vehicle.ExplosionPieces.Count(piece =>
+            MathF.Abs(piece.AngularVelocityRadiansPerSecond) <= 0.001f));
+    }
+
+    [Fact]
     public void ExplosionBurstsOutwardAndGroundResistanceReducesSpeed()
     {
         using GameWorld world = new();
@@ -299,6 +312,18 @@ public sealed class VehiclePhysicsTests
         float laterSpeed = world.Vehicle.ExplosionPieces[0].LinearVelocityMetersPerSecond.Length();
 
         Assert.True(laterSpeed < initialSpeed - 6.0f);
+    }
+
+    [Fact]
+    public void ExplosionPiecesStopSpinningAsTheySettle()
+    {
+        using GameWorld world = new();
+        world.ExplodeVehicle();
+
+        Step(world, default, 600);
+
+        Assert.All(world.Vehicle.ExplosionPieces, piece =>
+            Assert.Equal(0.0f, piece.AngularVelocityRadiansPerSecond, 0.001f));
     }
 
     [Fact]

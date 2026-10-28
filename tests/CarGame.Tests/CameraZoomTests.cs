@@ -61,4 +61,23 @@ public sealed class CameraZoomTests
 
         Assert.Equal(world.Vehicle.Position, renderer.CameraTarget);
     }
+
+    [Fact]
+    public void MissionBriefingFadesAfterCarStartsMovingAndResetRestoresIt()
+    {
+        GameRenderer renderer = new(1280, 720);
+
+        renderer.UpdateMissionBriefing(0.5f, 1.0f);
+        Assert.Equal(1.0f, renderer.MissionOpacity);
+
+        renderer.UpdateMissionBriefing(0.6f, 0.25f);
+        Assert.InRange(renderer.MissionOpacity, 0.66f, 0.67f);
+
+        renderer.UpdateMissionBriefing(0.0f, 0.5f);
+        renderer.UpdateMissionBriefing(0.0f, 0.25f);
+        Assert.Equal(0.0f, renderer.MissionOpacity);
+
+        renderer.ResetVisualEffects();
+        Assert.Equal(1.0f, renderer.MissionOpacity);
+    }
 }
