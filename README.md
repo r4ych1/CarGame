@@ -2,6 +2,8 @@
 
 A spec-driven 2D top-down driving game proof of concept.
 
+![CarGame gameplay showing two cars driving through a top-down environment](docs/screenshot.png)
+
 ## Technology
 
 - C# and .NET 8
